@@ -7,7 +7,17 @@ export class NotebookRenderer {
     this.lastBoilTime = 0;
     this.boilRate = 1000 / 12; // 12 FPS line jitter for authentic flipbook feel
     this.paperNoiseCanvas = null;
+    this.paperPattern = null;
     this.whiteFlashTimer = 0;
+
+    // Offscreen Paper Background Layer
+    this.offscreenPaper = document.createElement('canvas');
+    this.offscreenCtx = this.offscreenPaper.getContext('2d');
+    this.offscreenWidth = 0;
+    this.offscreenHeight = 0;
+    this.lastFlashState = false;
+    this.lastLightning = 0;
+    this.lineSpacing = 32;
 
     this.createPaperTexture();
   }
@@ -34,6 +44,71 @@ export class NotebookRenderer {
     }
     ctx.putImageData(imgData, 0, 0);
     this.paperNoiseCanvas = c;
+    this.paperPattern = ctx.createPattern(c, 'repeat');
+  }
+
+  onResize(width, height) {
+    this.rebuildPaperBackground(width, height, this.whiteFlashTimer > 0, 0);
+  }
+
+  rebuildPaperBackground(width, height, isFlash, lightning) {
+    const offH = height + this.lineSpacing * 2;
+    this.offscreenPaper.width = width;
+    this.offscreenPaper.height = offH;
+    const octx = this.offscreenCtx;
+
+    // 1. Base paper tone
+    if (isFlash) {
+      octx.fillStyle = '#ffffff';
+    } else if (lightning > 0.05) {
+      const flash = Math.min(1, lightning);
+      octx.fillStyle = `rgb(${Math.floor(251 + 4 * flash)}, ${Math.floor(248 + 7 * flash)}, ${Math.floor(235 + 20 * flash)})`;
+    } else {
+      octx.fillStyle = '#fbf7eb';
+    }
+    octx.fillRect(0, 0, width, offH);
+
+    // 2. Paper texture pattern (reusing cached pattern)
+    if (!this.paperPattern && this.paperNoiseCanvas) {
+      this.paperPattern = octx.createPattern(this.paperNoiseCanvas, 'repeat');
+    }
+    if (this.paperPattern) {
+      octx.globalAlpha = 0.65;
+      octx.fillStyle = this.paperPattern;
+      octx.fillRect(0, 0, width, offH);
+      octx.globalAlpha = 1.0;
+    }
+
+    // 3. Ruled horizontal blue lines
+    octx.strokeStyle = 'rgba(70, 120, 200, 0.28)';
+    octx.lineWidth = 1.2;
+
+    for (let y = 0; y <= offH; y += this.lineSpacing) {
+      octx.beginPath();
+      const jitter = Math.sin(y * 0.1) * 0.4;
+      octx.moveTo(0, y + jitter);
+      octx.lineTo(width, y + jitter);
+      octx.stroke();
+    }
+
+    // 4. Vertical red margin line (notebook classic)
+    const marginX = 80;
+    octx.strokeStyle = 'rgba(215, 60, 60, 0.4)';
+    octx.lineWidth = 1.8;
+    octx.beginPath();
+    octx.moveTo(marginX, 0);
+    octx.lineTo(marginX, offH);
+    octx.stroke();
+
+    // 5. Subtle paper edge vignette / binder holes
+    octx.fillStyle = 'rgba(40, 35, 30, 0.05)';
+    octx.fillRect(0, 0, width, 8);
+    octx.fillRect(0, offH - 8, width, 8);
+
+    this.offscreenWidth = width;
+    this.offscreenHeight = height;
+    this.lastFlashState = isFlash;
+    this.lastLightning = lightning;
   }
 
   update(dtOrTimestamp = performance.now()) {
@@ -61,63 +136,19 @@ export class NotebookRenderer {
     };
   }
 
-  // Draw full ruled notebook page
+  // Draw full ruled notebook page using cached offscreen background
   drawPaperBackground(ctx, width, height, camera, lightning = 0) {
-    ctx.save();
+    const isFlash = this.whiteFlashTimer > 0;
+    const lightningChanged = Math.abs(lightning - this.lastLightning) > 0.05;
 
-    // Base paper tone: check white flash (parry) or lightning
-    if (this.whiteFlashTimer > 0) {
-      ctx.fillStyle = '#ffffff';
-    } else if (lightning > 0.05) {
-      // Lightning flash makes paper bright white
-      const flash = Math.min(1, lightning);
-      ctx.fillStyle = `rgb(${Math.floor(251 + 4 * flash)}, ${Math.floor(248 + 7 * flash)}, ${Math.floor(235 + 20 * flash)})`;
-    } else {
-      ctx.fillStyle = '#fbf7eb';
-    }
-    ctx.fillRect(0, 0, width, height);
-
-    // Apply paper texture
-    if (this.paperNoiseCanvas) {
-      ctx.globalAlpha = 0.65;
-      const ptrn = ctx.createPattern(this.paperNoiseCanvas, 'repeat');
-      ctx.fillStyle = ptrn;
-      ctx.fillRect(0, 0, width, height);
-      ctx.globalAlpha = 1.0;
+    if (width !== this.offscreenWidth || height !== this.offscreenHeight || isFlash !== this.lastFlashState || lightningChanged) {
+      this.rebuildPaperBackground(width, height, isFlash, lightning);
     }
 
-    // Ruled horizontal blue lines
-    const lineSpacing = 32;
-    const scrollOffsetY = (camera ? (camera.y * camera.zoom) % lineSpacing : 0);
+    const scrollOffsetY = camera ? (camera.y * camera.zoom) % this.lineSpacing : 0;
+    const normScroll = ((scrollOffsetY % this.lineSpacing) + this.lineSpacing) % this.lineSpacing;
 
-    ctx.strokeStyle = 'rgba(70, 120, 200, 0.28)';
-    ctx.lineWidth = 1.2;
-
-    for (let y = -lineSpacing + scrollOffsetY; y < height + lineSpacing; y += lineSpacing) {
-      ctx.beginPath();
-      // Slight wavy hand-drawn blue lines
-      const jitter = Math.sin(y * 0.1 + this.boilIndex) * 0.4;
-      ctx.moveTo(0, y + jitter);
-      ctx.lineTo(width, y + jitter);
-      ctx.stroke();
-    }
-
-    // Vertical red margin line (notebook classic)
-    const marginX = 80;
-    ctx.strokeStyle = 'rgba(215, 60, 60, 0.4)';
-    ctx.lineWidth = 1.8;
-    ctx.beginPath();
-    const marginJitter = Math.cos(this.boilIndex * 1.5) * 0.6;
-    ctx.moveTo(marginX + marginJitter, 0);
-    ctx.lineTo(marginX + marginJitter, height);
-    ctx.stroke();
-
-    // Subtle paper edge vignette / binder holes
-    ctx.fillStyle = 'rgba(40, 35, 30, 0.05)';
-    ctx.fillRect(0, 0, width, 8);
-    ctx.fillRect(0, height - 8, width, 8);
-
-    ctx.restore();
+    ctx.drawImage(this.offscreenPaper, 0, normScroll - this.lineSpacing);
   }
 
   // Draw a rough, multi-pass hand-sketched line

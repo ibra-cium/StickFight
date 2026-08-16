@@ -19,6 +19,9 @@ export class MenuUI {
     if (!canvas) return;
 
     const getCanvasPos = (e) => {
+      if (this.game && this.game.toGameCoords) {
+        return this.game.toGameCoords(e.clientX, e.clientY);
+      }
       const rect = canvas.getBoundingClientRect();
       return {
         x: e.clientX - rect.left,
@@ -65,6 +68,9 @@ export class MenuUI {
       case 'title':
         this.drawTitleScreen(ctx, width, height);
         break;
+      case 'controls':
+        this.drawControlsScreen(ctx, width, height);
+        break;
       case 'level_select':
         this.drawLevelSelectScreen(ctx, width, height);
         break;
@@ -79,8 +85,10 @@ export class MenuUI {
         break;
     }
 
-    // Draw Audio & Settings toggles in corners
-    this.drawSettingsToggles(ctx, width, height);
+    // Draw Audio & Settings toggles in corners (except on controls screen where Back is centered)
+    if (this.game.state !== 'controls') {
+      this.drawSettingsToggles(ctx, width, height);
+    }
 
     ctx.restore();
   }
@@ -107,7 +115,7 @@ export class MenuUI {
 
     // Main Text
     renderer.sketchText(ctx, text, x + w / 2, y + (subtext ? h * 0.38 : h / 2) + 1, {
-      font: `bold ${h > 50 ? '22px' : '17px'} 'Permanent Marker', cursive`,
+      font: `bold ${h >= 48 ? '20px' : '16px'} 'Permanent Marker', cursive`,
       color: isLocked ? '#888' : (isHover ? '#8b0000' : color),
       align: 'center',
       seed: x,
@@ -127,11 +135,23 @@ export class MenuUI {
   }
 
   drawTitleScreen(ctx, width, height) {
+    // Top-right "?" Controls Button
+    this.drawButton(ctx, {
+      id: 'btn_help',
+      x: width - 64,
+      y: 16,
+      w: 48,
+      h: 48,
+      text: "?",
+      color: '#111',
+      onClick: () => this.game.setState('controls'),
+    });
+
     // Notebook Title Box
     const titleBoxW = Math.min(540, width * 0.85);
-    const titleBoxH = 140;
+    const titleBoxH = 130;
     const bx = width / 2 - titleBoxW / 2;
-    const by = height * 0.12;
+    const by = height * 0.08;
 
     renderer.sketchBox(ctx, bx, by, titleBoxW, titleBoxH, {
       fill: 'rgba(255, 255, 255, 0.65)',
@@ -141,7 +161,7 @@ export class MenuUI {
     });
 
     // Main Title
-    renderer.sketchText(ctx, "NOTEBOOK DUEL", width / 2, by + 48, {
+    renderer.sketchText(ctx, "NOTEBOOK DUEL", width / 2, by + 46, {
       font: "bold 44px 'Permanent Marker', cursive",
       color: '#111',
       align: 'center',
@@ -149,7 +169,7 @@ export class MenuUI {
     });
 
     // Subtitle
-    renderer.sketchText(ctx, "— Draw. Fight. Survive. —", width / 2, by + 98, {
+    renderer.sketchText(ctx, "— Draw. Fight. Survive. —", width / 2, by + 94, {
       font: "bold 20px 'Caveat', cursive",
       color: '#c62828',
       align: 'center',
@@ -157,29 +177,15 @@ export class MenuUI {
     });
 
     // Animated stickman preview doodles in center
-    this.drawTitleDoodle(ctx, width / 2, height * 0.55);
+    this.drawTitleDoodle(ctx, width / 2, height * 0.52);
 
-    // Controls hints
-    renderer.sketchText(ctx, "Mobile: Left Joystick (Move/Guard) | Tap (Light) | Swipe (Heavy) | Double-Tap (Dash)", width / 2, height * 0.70, {
-      font: "14px 'Architects Daughter', cursive",
-      color: '#444',
-      align: 'center',
-      seed: 13,
-    });
-    renderer.sketchText(ctx, "Desktop: A/D: Move  |  Space: Jump  |  Left-Click: Attack  |  Right-Click: Heavy  |  Shift: Block", width / 2, height * 0.74, {
-      font: "13px 'Architects Daughter', cursive",
-      color: '#666',
-      align: 'center',
-      seed: 14,
-    });
-
-    // Main Menu Action Buttons
+    // Main Menu Action Buttons (Minimum 48px height)
     const btnW = 200;
     const btnH = 50;
     this.drawButton(ctx, {
       id: 'btn_play',
       x: width / 2 - btnW - 12,
-      y: height * 0.80,
+      y: height * 0.74,
       w: btnW,
       h: btnH,
       text: "START DUEL",
@@ -189,11 +195,118 @@ export class MenuUI {
     this.drawButton(ctx, {
       id: 'btn_levels',
       x: width / 2 + 12,
-      y: height * 0.80,
+      y: height * 0.74,
       w: btnW,
       h: btnH,
       text: "LEVEL SELECT",
       onClick: () => this.game.setState('level_select'),
+    });
+  }
+
+  drawControlsScreen(ctx, width, height) {
+    const cardW = Math.min(840, width * 0.92);
+    const cardH = Math.min(440, height * 0.82);
+    const cx = width / 2 - cardW / 2;
+    const cy = height * 0.06;
+
+    // Outer sketch card
+    renderer.sketchBox(ctx, cx, cy, cardW, cardH, {
+      fill: 'rgba(255, 255, 255, 0.85)',
+      color: '#111',
+      width: 3.0,
+      seed: 70,
+    });
+
+    // Header
+    renderer.sketchText(ctx, "HOW TO PLAY & CONTROLS", width / 2, cy + 34, {
+      font: "bold 28px 'Permanent Marker', cursive",
+      color: '#8b0000',
+      align: 'center',
+      seed: 71,
+    });
+
+    const colW = cardW * 0.44;
+    const leftColX = cx + cardW * 0.05;
+    const rightColX = cx + cardW * 0.51;
+    const contentY = cy + 68;
+
+    // Mobile Column
+    renderer.sketchBox(ctx, leftColX, contentY, colW, 255, {
+      fill: 'rgba(251, 248, 235, 0.6)',
+      color: '#0d47a1',
+      width: 1.8,
+      seed: 72,
+    });
+    renderer.sketchText(ctx, "📱 MOBILE GESTURES", leftColX + colW / 2, contentY + 22, {
+      font: "bold 17px 'Permanent Marker', cursive",
+      color: '#0d47a1',
+      align: 'center',
+      seed: 73,
+    });
+
+    const mobileLines = [
+      "👈 Left Drag: Move / Run",
+      "🛡 Left Pull Back: Guard / Block",
+      "⬆ Left Flick Up: Jump",
+      "⬇ Left Flick Down: Crouch",
+      "👉 Right Tap: Light Attack",
+      "💥 Right Swipe: Heavy Variants",
+      "   (⬇ Cleave / ⬆ Uppercut / ➔ Thrust)",
+      "⚡ Right Double-Tap: Dash",
+    ];
+    mobileLines.forEach((line, idx) => {
+      renderer.sketchText(ctx, line, leftColX + 16, contentY + 52 + idx * 24, {
+        font: "14px 'Architects Daughter', cursive",
+        color: '#222',
+        align: 'left',
+        seed: 74 + idx,
+      });
+    });
+
+    // Desktop Column
+    renderer.sketchBox(ctx, rightColX, contentY, colW, 255, {
+      fill: 'rgba(251, 248, 235, 0.6)',
+      color: '#1b5e20',
+      width: 1.8,
+      seed: 85,
+    });
+    renderer.sketchText(ctx, "💻 KEYBOARD & MOUSE", rightColX + colW / 2, contentY + 22, {
+      font: "bold 17px 'Permanent Marker', cursive",
+      color: '#1b5e20',
+      align: 'center',
+      seed: 86,
+    });
+
+    const desktopLines = [
+      "⌨ A / D or ◀ ▶: Move Left / Right",
+      "🛡 Shift / K / C: Guard / Block",
+      "⬆ W / Space / ▲: Jump",
+      "⬇ S / ▼: Crouch",
+      "⚔ Left-Click / J / Z: Light Attack",
+      "💥 Right-Click / L / X: Heavy Attack",
+      "⚡ E / F: Dash",
+      "🎯 Space / W: Jump over low attacks",
+    ];
+    desktopLines.forEach((line, idx) => {
+      renderer.sketchText(ctx, line, rightColX + 16, contentY + 52 + idx * 24, {
+        font: "14px 'Architects Daughter', cursive",
+        color: '#222',
+        align: 'left',
+        seed: 87 + idx,
+      });
+    });
+
+    // Back Button (48px height)
+    const backW = 180;
+    const backH = 48;
+    this.drawButton(ctx, {
+      id: 'btn_controls_back',
+      x: width / 2 - backW / 2,
+      y: cy + cardH - 58,
+      w: backW,
+      h: backH,
+      text: "◀ BACK",
+      onClick: () => this.game.setState('title'),
     });
   }
 
@@ -274,9 +387,9 @@ export class MenuUI {
       });
     }
 
-    // Back to menu button
-    const backW = 160;
-    const backH = 45;
+    // Back to menu button (min 48px height)
+    const backW = 170;
+    const backH = 48;
     this.drawButton(ctx, {
       id: 'btn_back',
       x: width / 2 - backW / 2,
@@ -456,14 +569,14 @@ export class MenuUI {
   }
 
   drawSettingsToggles(ctx, width, height) {
-    // 1. Audio Toggle (Right)
+    // 1. Audio Toggle (Right, min 48px height)
     const audioIcon = sound.enabled ? "🔊 AUDIO ON" : "🔇 AUDIO OFF";
     this.drawButton(ctx, {
       id: 'btn_sound',
-      x: width - 130,
-      y: height - 42,
-      w: 118,
-      h: 30,
+      x: width - 165,
+      y: height - 58,
+      w: 145,
+      h: 48,
       text: audioIcon,
       color: '#555',
       onClick: () => {
@@ -473,17 +586,17 @@ export class MenuUI {
       },
     });
 
-    // 2. Control Mode Toggle (Left): Gesture controls vs Button controls
+    // 2. Control Mode Toggle (Left, min 48px height): Gesture controls vs Button controls
     const controlMode = localStorage.getItem('notebook_duel_control_mode') || 'gesture';
     const isGesture = (controlMode === 'gesture');
     const controlText = isGesture ? "🎮 GESTURE CTRL" : "🕹 BUTTON CTRL";
 
     this.drawButton(ctx, {
       id: 'btn_control_mode',
-      x: 16,
-      y: height - 42,
-      w: 140,
-      h: 30,
+      x: 20,
+      y: height - 58,
+      w: 155,
+      h: 48,
       text: controlText,
       color: isGesture ? '#1b5e20' : '#0d47a1',
       onClick: () => {
@@ -493,16 +606,16 @@ export class MenuUI {
       },
     });
 
-    // 3. Haptics Toggle (Middle-Left)
+    // 3. Haptics Toggle (Middle-Left, min 48px height)
     const hapticsEnabled = (localStorage.getItem('notebook_duel_haptics') || 'true') === 'true';
     const hapticText = hapticsEnabled ? "📳 HAPTICS ON" : "📳 HAPTICS OFF";
 
     this.drawButton(ctx, {
       id: 'btn_haptics',
-      x: 164,
-      y: height - 42,
-      w: 125,
-      h: 30,
+      x: 185,
+      y: height - 58,
+      w: 140,
+      h: 48,
       text: hapticText,
       color: hapticsEnabled ? '#555' : '#888',
       onClick: () => {

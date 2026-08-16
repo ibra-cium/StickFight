@@ -1,0 +1,10 @@
+{
+  "name": "Notebook Duel",
+  "short_name": "NotebookDuel",
+  "description": "Hand-drawn 2D sword fighting game prototype in a procedural notebook style.",
+  "start_url": "./index.html",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#242426",
+  "theme_color": "#242426"
+}

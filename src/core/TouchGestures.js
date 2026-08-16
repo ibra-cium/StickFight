@@ -81,10 +81,13 @@ export class TouchGestures {
   }
 
   getTouchPos(e) {
+    if (this.game && this.game.toGameCoords) {
+      return this.game.toGameCoords(e.clientX, e.clientY);
+    }
     const rect = this.canvas.getBoundingClientRect();
     return {
-      x: (e.clientX - rect.left) * (this.game ? this.game.width / rect.width : 1),
-      y: (e.clientY - rect.top) * (this.game ? this.game.height / rect.height : 1),
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
     };
   }
 
@@ -102,7 +105,9 @@ export class TouchGestures {
     e.preventDefault();
 
     const pos = this.getTouchPos(e);
-    const midX = (this.game.width || 960) / 2;
+    const gameW = this.game.width || 960;
+    const gameH = this.game.height || 540;
+    const midX = gameW / 2;
 
     // LEFT ZONE: Movement
     if (pos.x < midX && this.movePointerId === null) {
@@ -117,8 +122,8 @@ export class TouchGestures {
       return;
     }
 
-    // RIGHT ZONE: Combat
-    if (pos.x >= midX && this.combatPointerId === null) {
+    // RIGHT ZONE: Combat (Keep clear of bottom 8% of screen to prevent Android back gestures)
+    if (pos.x >= midX && pos.y <= gameH * 0.92 && this.combatPointerId === null) {
       this.combatPointerId = e.pointerId;
       this.canvas.setPointerCapture(e.pointerId);
       this.combatOrigin = { x: pos.x, y: pos.y };

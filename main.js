@@ -14,14 +14,21 @@ import { LevelSystem } from './src/systems/LevelSystem.js';
 import { HUD } from './src/ui/HUD.js';
 import { MenuUI } from './src/ui/MenuUI.js';
 
+export const DESIGN_W = 960;
+export const DESIGN_H = 540;
+
 class NotebookDuelGame {
   constructor() {
     this.canvas = document.getElementById('game-canvas');
     this.ctx = this.canvas.getContext('2d');
     this.touchOverlay = document.getElementById('touch-controls');
 
-    this.width = 960;
-    this.height = 540;
+    this.width = DESIGN_W;
+    this.height = DESIGN_H;
+    this.viewScale = 1.0;
+    this.offsetX = 0;
+    this.offsetY = 0;
+    this.dpr = 1;
 
     // Subsystems
     this.input = new InputController(this.canvas, this);
@@ -36,11 +43,12 @@ class NotebookDuelGame {
     this.player = new Player({ x: -160, facing: 1 });
     this.enemy = null;
 
-    // Game state: 'title', 'level_select', 'playing', 'victory_screen', 'gameover_screen', 'game_complete'
+    // Game state: 'title', 'controls', 'level_select', 'playing', 'victory_screen', 'gameover_screen', 'game_complete'
     this.state = 'title';
     this.matchEndTimer = 0;
     this.lastTime = performance.now();
 
+    this.initFullscreenHandler();
     this.initResize();
     this.setState('title');
     this.syncControlsUI();
@@ -48,18 +56,52 @@ class NotebookDuelGame {
     requestAnimationFrame(this.loop);
   }
 
+  initFullscreenHandler() {
+    const handleFirstInteraction = () => {
+      if (this.state === 'title' || this.state === 'controls') {
+        try {
+          if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+            document.documentElement.requestFullscreen().catch(() => {});
+          }
+        } catch (e) {}
+        try {
+          if (screen.orientation && screen.orientation.lock) {
+            screen.orientation.lock('landscape').catch(() => {});
+          }
+        } catch (e) {}
+      }
+      window.removeEventListener('pointerdown', handleFirstInteraction);
+    };
+    window.addEventListener('pointerdown', handleFirstInteraction);
+  }
+
+  toGameCoords(clientX, clientY) {
+    const rect = this.canvas.getBoundingClientRect();
+    return {
+      x: (clientX - rect.left - this.offsetX) / this.viewScale,
+      y: (clientY - rect.top - this.offsetY) / this.viewScale,
+    };
+  }
+
   initResize() {
     const resize = () => {
       const rect = this.canvas.parentElement.getBoundingClientRect();
-      const dpr = window.devicePixelRatio || 1;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      this.dpr = dpr;
 
       this.canvas.width = rect.width * dpr;
       this.canvas.height = rect.height * dpr;
 
-      this.width = rect.width;
-      this.height = rect.height;
+      this.viewScale = Math.min(rect.width / DESIGN_W, rect.height / DESIGN_H);
+      this.offsetX = (rect.width - DESIGN_W * this.viewScale) / 2;
+      this.offsetY = (rect.height - DESIGN_H * this.viewScale) / 2;
 
-      this.camera.resize(this.width, this.height);
+      this.width = DESIGN_W;
+      this.height = DESIGN_H;
+
+      this.camera.resize(DESIGN_W, DESIGN_H);
+      renderer.onResize(DESIGN_W, DESIGN_H);
+      scenery.onResize();
     };
 
     window.addEventListener('resize', resize);
@@ -164,11 +206,23 @@ class NotebookDuelGame {
   }
 
   draw() {
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = this.dpr || 1;
     const ctx = this.ctx;
 
+    // Fill letterbox bars in physical device coordinates
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = '#242426';
+    ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
     ctx.save();
-    ctx.scale(dpr, dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.translate(this.offsetX, this.offsetY);
+    ctx.scale(this.viewScale, this.viewScale);
+
+    // Clip to design area to keep letterbox clean
+    ctx.beginPath();
+    ctx.rect(0, 0, DESIGN_W, DESIGN_H);
+    ctx.clip();
 
     // 1. Draw Notebook Paper Background (with Blue Ruled Lines & Red Margin)
     renderer.drawPaperBackground(ctx, this.width, this.height, this.camera, weather.lightningFlash);
@@ -201,7 +255,7 @@ class NotebookDuelGame {
       scenery.draw(ctx);
       this.camera.end(ctx);
 
-      // Draw Menus (Title, Level Select, Victory, Game Over)
+      // Draw Menus (Title, Controls, Level Select, Victory, Game Over, Game Complete)
       this.menuUI.draw(ctx, this.width, this.height);
     }
 
