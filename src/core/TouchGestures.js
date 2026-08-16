@@ -143,9 +143,9 @@ export class TouchGestures {
       // Add to trail
       this.trailPoints.push({ x: pos.x, y: pos.y, alpha: 1.0, time: now });
 
-      // Double-tap check for DASH (two taps within 260ms within 60px)
+      // Double-tap check for DASH (two taps within 200ms within 45px)
       const tapDist = Math.hypot(pos.x - this.lastRightTapPos.x, pos.y - this.lastRightTapPos.y);
-      if (now - this.lastRightTapTime <= 260 && tapDist < 60) {
+      if (now - this.lastRightTapTime <= 200 && tapDist < 45) {
         if (this.input) this.input.queueAction('dash');
         this.lastRightTapTime = 0; // reset
       } else {
@@ -173,24 +173,24 @@ export class TouchGestures {
       const dy = this.moveCurrent.y - this.moveOrigin.y;
       const elapsed = now - this.moveStartTime;
 
-      // Flick UP -> Jump (dy < -45px within 220ms)
-      if (!this.moveFlickJumped && elapsed <= 220 && dy < -45) {
+      // Flick UP -> Jump (dy < -32px within 180ms)
+      if (!this.moveFlickJumped && elapsed <= 180 && dy < -32) {
         if (this.input) this.input.queueAction('jump');
         this.moveFlickJumped = true;
       }
 
-      // Flick DOWN -> Crouch (dy > 45px within 220ms)
-      // Cleared after 220ms flick window expires rather than based on dy
-      if (!this.moveFlickCrouched && elapsed <= 220 && dy > 45) {
+      // Flick DOWN -> Crouch (dy > 32px within 180ms)
+      // Cleared after 180ms flick window expires rather than based on dy
+      if (!this.moveFlickCrouched && elapsed <= 180 && dy > 32) {
         if (this.input) this.input.touch.crouch = true;
         this.moveFlickCrouched = true;
-      } else if (elapsed > 220 && this.input && this.input.touch.crouch) {
+      } else if (elapsed > 180 && this.input && this.input.touch.crouch) {
         this.input.touch.crouch = false;
       }
 
-      // Joystick Analog X (Dead zone 14px, Max radius 70px)
+      // Joystick Analog X (Dead zone 8px, Max radius 70px)
       const absDx = Math.abs(dx);
-      if (absDx < 14) {
+      if (absDx < 8) {
         if (this.input) {
           this.input.touchAxisX = 0;
           this.input.touch.left = false;
@@ -198,7 +198,7 @@ export class TouchGestures {
         }
       } else {
         const sign = Math.sign(dx);
-        const norm = Math.min(1.0, (absDx - 14) / (70 - 14));
+        const norm = Math.min(1.0, (absDx - 8) / (70 - 8));
         if (this.input) {
           this.input.touchAxisX = sign * norm;
           this.input.touch.left = (sign < 0);
@@ -207,9 +207,9 @@ export class TouchGestures {
       }
 
       // Pull BACKWARD to Block:
-      // Player facing: 1 = facing right (away is dx < -28), -1 = facing left (away is dx > 28)
+      // Player facing: 1 = facing right (away is dx < -18), -1 = facing left (away is dx > 18)
       const playerFacing = (this.game.player && this.game.player.facing) || 1;
-      const isPullingBack = (playerFacing === 1 && dx < -28) || (playerFacing === -1 && dx > 28);
+      const isPullingBack = (playerFacing === 1 && dx < -18) || (playerFacing === -1 && dx > 18);
       if (this.input) {
         this.input.touch.block = isPullingBack;
       }
@@ -229,8 +229,8 @@ export class TouchGestures {
       const dist = Math.hypot(dx, dy);
       const elapsed = now - this.combatStartTime;
 
-      // Check Swipe (> 26px within 250ms)
-      if (!this.combatSwipeTriggered && dist > 26 && elapsed <= 250) {
+      // Check Swipe (> 20px within 200ms)
+      if (!this.combatSwipeTriggered && dist > 20 && elapsed <= 200) {
         this.combatSwipeTriggered = true;
 
         // Determine heavy variant direction:
@@ -316,7 +316,7 @@ export class TouchGestures {
 
     // Clear flick crouch when flick window has expired
     if (this.movePointerId !== null && this.input && this.input.touch.crouch) {
-      if (now - this.moveStartTime > 220) {
+      if (now - this.moveStartTime > 180) {
         this.input.touch.crouch = false;
       }
     }

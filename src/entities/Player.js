@@ -97,10 +97,10 @@ export class Player extends Fighter {
     const axisX = input.axisX || 0;
     const absAxis = Math.abs(axisX);
 
-    if (absAxis >= 0.2) {
+    if (absAxis >= 0.12) {
       this.vx = this.speed * axisX;
       if (this.isGrounded) {
-        if (absAxis > 0.55) {
+        if (absAxis > 0.4) {
           this.state = 'run';
         } else {
           this.state = 'walk';

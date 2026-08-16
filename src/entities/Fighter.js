@@ -425,7 +425,7 @@ export class Fighter {
 
       case 'windup': {
         // Pull sword back & anticipation lean
-        const progress = Math.min(1, this.stateTimer / 0.14);
+        const progress = Math.min(1, this.stateTimer / 0.10);
         a.torso = -0.15 * progress;
         a.head = 0.08 * progress;
         a.rightShoulder = -1.4 * progress;
@@ -438,7 +438,7 @@ export class Fighter {
         a.leftKnee = 0.2;
         a.swordAngle = -0.9 * progress;
 
-        if (this.stateTimer >= 0.14) {
+        if (this.stateTimer >= 0.10) {
           this.state = 'attack';
           this.stateTimer = 0;
           sound.playSwing(false);
@@ -447,15 +447,15 @@ export class Fighter {
       }
 
       case 'attack': {
-        // Forward root motion burst on first 0.10s
-        if (this.stateTimer <= 0.10) {
+        // Forward root motion burst on first 0.08s
+        if (this.stateTimer <= 0.08) {
           this.vx = this.facing * 120;
         } else {
           this.vx = 0;
         }
 
         // Explosive forward slash
-        const progress = Math.min(1, this.stateTimer / 0.18);
+        const progress = Math.min(1, this.stateTimer / 0.14);
         const ease = Math.sin((progress * Math.PI) / 2);
 
         a.torso = -0.15 + 0.55 * ease;
@@ -470,10 +470,10 @@ export class Fighter {
         a.leftHip = -0.3 * ease;
         a.leftKnee = 0.2;
 
-        if (this.stateTimer >= 0.18) {
+        if (this.stateTimer >= 0.14) {
           this.state = 'idle';
           this.stateTimer = 0;
-          this.attackCooldown = 0.22;
+          this.attackCooldown = 0.16;
         }
         break;
       }
@@ -496,7 +496,7 @@ export class Fighter {
 
       case 'dash': {
         // Quick evasive slide forward
-        const progress = Math.min(1, this.stateTimer / 0.16);
+        const progress = Math.min(1, this.stateTimer / 0.13);
         a.torso = 0.55 * (1 - progress * 0.4);
         a.head = -0.3;
         a.rightShoulder = -1.2;
@@ -509,7 +509,7 @@ export class Fighter {
         a.leftHip = -0.7;
         a.leftKnee = 0.4;
 
-        if (this.stateTimer >= 0.16) {
+        if (this.stateTimer >= 0.13) {
           this.state = 'idle';
           this.stateTimer = 0;
           this.attackCooldown = 0.08;
@@ -518,7 +518,7 @@ export class Fighter {
       }
 
       case 'heavy_windup': {
-        const progress = Math.min(1, this.stateTimer / 0.32);
+        const progress = Math.min(1, this.stateTimer / 0.26);
 
         if (this.heavyVariant === 'uppercut') {
           // Low sword preparation for upward rising slash
@@ -561,7 +561,7 @@ export class Fighter {
           a.leftKnee = 0.2;
         }
 
-        if (this.stateTimer >= 0.32) {
+        if (this.stateTimer >= 0.26) {
           this.state = 'heavy_attack';
           this.stateTimer = 0;
           sound.playSwing(true);
@@ -636,7 +636,7 @@ export class Fighter {
         if (this.stateTimer >= 0.24) {
           this.state = 'idle';
           this.stateTimer = 0;
-          this.attackCooldown = 0.45;
+          this.attackCooldown = 0.35;
         }
         break;
       }
@@ -660,14 +660,14 @@ export class Fighter {
 
       case 'hit': {
         // Flinch recoil
-        const progress = Math.min(1, this.stateTimer / 0.22);
+        const progress = Math.min(1, this.stateTimer / 0.18);
         a.torso = -0.4 * (1 - progress);
         a.head = 0.4 * (1 - progress);
         a.rightShoulder = -0.2;
         a.rightElbow = -0.4;
         a.swordAngle = -0.2;
 
-        if (this.stateTimer >= 0.22) {
+        if (this.stateTimer >= 0.18) {
           this.state = 'idle';
           this.stateTimer = 0;
         }

@@ -43,6 +43,10 @@ export class InputController {
 
   queueAction(action) {
     this.eventQueue.push({ action, time: performance.now() });
+    // Immediately set key state + buffer to eliminate 1-frame delay
+    this.keys[action] = true;
+    this.bufferTimers[action] = 0.18; // 180ms buffer
+    this.consumed[action] = false;
   }
 
   reset() {
@@ -270,7 +274,7 @@ export class InputController {
 
       // If queued in eventQueue or newly pressed -> start/refresh 150ms buffer window
       if (queuedPulses[a] || (isNowDown && !wasDown)) {
-        this.bufferTimers[a] = 0.15; // 150ms buffer
+        this.bufferTimers[a] = 0.18; // 180ms buffer
         this.consumed[a] = false;
       }
     }
