@@ -2,6 +2,19 @@
 
 import { renderer } from '../graphics/NotebookRenderer.js';
 
+function triggerHaptic(type) {
+  const enabled = (localStorage.getItem('notebook_duel_haptics') || 'true') === 'true';
+  if (!enabled || typeof navigator === 'undefined' || !navigator.vibrate) return;
+  try {
+    if (type === 'hit') navigator.vibrate(10);
+    else if (type === 'parry') navigator.vibrate(30);
+    else if (type === 'guard_break') navigator.vibrate([20, 40, 20]);
+    else if (type === 'block') navigator.vibrate(10);
+  } catch (e) {
+    // Ignore unsupported browser / permission constraints
+  }
+}
+
 export class CombatSystem {
   constructor(camera) {
     this.camera = camera;
@@ -51,12 +64,15 @@ export class CombatSystem {
         this.camera.shake(12);
         this.camera.hitstop(0.15); // 0.15s hitstop
         renderer.flashWhite(0.08); // Flash paper white for 0.08s
+        triggerHaptic('parry');
       } else if (result.type === 'guard_break') {
         this.camera.shake(10);
         this.camera.hitstop(0.08);
+        triggerHaptic('guard_break');
       } else if (result.type === 'block') {
         this.camera.shake(4);
         this.camera.hitstop(0.035);
+        triggerHaptic('block');
       } else if (result.type === 'hit' || result.type === 'death') {
         this.camera.shake(isHeavy ? 14 : 7);
         this.camera.hitstop(isHeavy ? 0.085 : 0.05);
@@ -64,6 +80,7 @@ export class CombatSystem {
         if (result.type === 'death') {
           this.camera.triggerSlowMo(0.5, 0.25);
         }
+        triggerHaptic('hit');
       }
     }
   }

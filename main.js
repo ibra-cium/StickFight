@@ -1,6 +1,7 @@
 // Main Game Loop and State Coordinator for Notebook Duel
 
 import { InputController } from './src/core/Input.js';
+import { TouchGestures } from './src/core/TouchGestures.js';
 import { Camera } from './src/core/Camera.js';
 import { sound } from './src/core/Audio.js';
 import { renderer } from './src/graphics/NotebookRenderer.js';
@@ -24,6 +25,7 @@ class NotebookDuelGame {
 
     // Subsystems
     this.input = new InputController(this.canvas, this);
+    this.touchGestures = new TouchGestures(this.canvas, this.input, this);
     this.camera = new Camera(this.width, this.height);
     this.combat = new CombatSystem(this.camera);
     this.levelSystem = new LevelSystem();
@@ -41,6 +43,7 @@ class NotebookDuelGame {
 
     this.initResize();
     this.setState('title');
+    this.syncControlsUI();
     this.loop = this.loop.bind(this);
     requestAnimationFrame(this.loop);
   }
@@ -64,11 +67,14 @@ class NotebookDuelGame {
     resize();
   }
 
-  setState(newState) {
-    this.state = newState;
-    this.input.reset();
+  syncControlsUI() {
+    const mode = localStorage.getItem('notebook_duel_control_mode') || 'gesture';
+    const isGesture = (mode === 'gesture');
+
+    this.touchGestures.setEnabled(isGesture);
+
     if (this.touchOverlay) {
-      if (this.state === 'playing') {
+      if (this.state === 'playing' && !isGesture) {
         this.touchOverlay.classList.remove('hidden');
       } else {
         this.touchOverlay.classList.add('hidden');
@@ -76,8 +82,16 @@ class NotebookDuelGame {
     }
   }
 
+  setState(newState) {
+    this.state = newState;
+    this.input.reset();
+    this.touchGestures.reset();
+    this.syncControlsUI();
+  }
+
   startLevel(levelNum) {
     this.input.reset();
+    this.touchGestures.reset();
     this.levelSystem.currentLevel = levelNum;
     const cfg = this.levelSystem.getCurrentConfig();
 
@@ -92,7 +106,8 @@ class NotebookDuelGame {
   }
 
   update(dt) {
-    this.input.update();
+    this.input.update(dt);
+    this.touchGestures.update(dt);
     renderer.update(dt);
 
     if (this.state === 'playing') {
@@ -177,8 +192,9 @@ class NotebookDuelGame {
 
       this.camera.end(ctx);
 
-      // 3. Screen Space HUD
+      // 3. Screen Space HUD & Touch Gestures
       this.hud.draw(ctx, this.width, this.height, this.player, this.enemy, this.levelSystem.getCurrentConfig());
+      this.touchGestures.draw(ctx, this.width, this.height);
     } else {
       // Draw background scenery behind menus for atmosphere
       this.camera.begin(ctx);

@@ -1,6 +1,8 @@
 // Unified Input Controller for Keyboard, Mouse, and Touch
 
-const ACTIONS = ['left', 'right', 'jump', 'attack', 'heavy', 'block'];
+// Unified Input Controller for Keyboard, Mouse, and Touch
+
+export const ACTIONS = ['left', 'right', 'jump', 'attack', 'heavy', 'block', 'crouch', 'dash'];
 
 export class InputController {
   constructor(canvas = null, game = null) {
@@ -13,12 +15,22 @@ export class InputController {
     this.keys = {};
     this.prevKeys = {};
 
+    this.axisX = 0;
+    this.touchAxisX = 0;
+    this.heavyVariant = 'overhead'; // 'overhead', 'uppercut', 'thrust'
+
+    // Input buffering for attack, heavy, dash (150ms window)
+    this.bufferTimers = {};
+    this.consumed = {};
+
     for (const a of ACTIONS) {
       this.keyboard[a] = false;
       this.mouse[a] = false;
       this.touch[a] = false;
       this.keys[a] = false;
       this.prevKeys[a] = false;
+      this.bufferTimers[a] = 0;
+      this.consumed[a] = false;
     }
 
     this.touchPointers = new Map(); // pointerId -> action
@@ -35,7 +47,12 @@ export class InputController {
       this.touch[a] = false;
       this.keys[a] = false;
       this.prevKeys[a] = false;
+      this.bufferTimers[a] = 0;
+      this.consumed[a] = false;
     }
+    this.axisX = 0;
+    this.touchAxisX = 0;
+    this.heavyVariant = 'overhead';
     this.touchPointers.clear();
     const btnIds = ['btn-left', 'btn-right', 'btn-jump', 'btn-attack', 'btn-heavy', 'btn-block'];
     for (const id of btnIds) {
@@ -104,6 +121,10 @@ export class InputController {
         case 'ArrowUp':
           this.keyboard.jump = true;
           break;
+        case 'ArrowDown':
+        case 'KeyS':
+          this.keyboard.crouch = true;
+          break;
         case 'KeyJ':
         case 'KeyZ':
           this.keyboard.attack = true;
@@ -117,6 +138,10 @@ export class InputController {
         case 'KeyX':
         case 'KeyL':
           this.keyboard.heavy = true;
+          break;
+        case 'KeyE':
+        case 'KeyF':
+          this.keyboard.dash = true;
           break;
       }
     });
@@ -136,6 +161,10 @@ export class InputController {
         case 'ArrowUp':
           this.keyboard.jump = false;
           break;
+        case 'ArrowDown':
+        case 'KeyS':
+          this.keyboard.crouch = false;
+          break;
         case 'KeyJ':
         case 'KeyZ':
           this.keyboard.attack = false;
@@ -149,6 +178,10 @@ export class InputController {
         case 'KeyX':
         case 'KeyL':
           this.keyboard.heavy = false;
+          break;
+        case 'KeyE':
+        case 'KeyF':
+          this.keyboard.dash = false;
           break;
       }
     });
@@ -202,11 +235,52 @@ export class InputController {
     bindBtn('btn-block', 'block');
   }
 
-  update() {
+  update(dt = 1 / 60) {
     this.prevKeys = { ...this.keys };
+
     for (const a of ACTIONS) {
-      this.keys[a] = this.keyboard[a] || this.mouse[a] || this.touch[a];
+      const isNowDown = !!(this.keyboard[a] || this.mouse[a] || this.touch[a]);
+      const wasDown = !!this.prevKeys[a];
+
+      this.keys[a] = isNowDown;
+
+      // Update 150ms buffer timer
+      if (this.bufferTimers[a] > 0) {
+        this.bufferTimers[a] -= dt;
+        if (this.bufferTimers[a] <= 0) {
+          this.bufferTimers[a] = 0;
+          this.consumed[a] = false;
+        }
+      }
+
+      // Just pressed -> start buffer window
+      if (isNowDown && !wasDown) {
+        this.bufferTimers[a] = 0.15; // 150ms buffer
+        this.consumed[a] = false;
+      }
     }
+
+    // Compute axisX (-1..1)
+    let kbAxis = 0;
+    if (this.keyboard.left && !this.keyboard.right) kbAxis = -1;
+    else if (this.keyboard.right && !this.keyboard.left) kbAxis = 1;
+
+    if (kbAxis !== 0) {
+      this.axisX = kbAxis;
+    } else if (Math.abs(this.touchAxisX) > 0.01) {
+      this.axisX = this.touchAxisX;
+    } else if (this.touch.left && !this.touch.right) {
+      this.axisX = -1;
+    } else if (this.touch.right && !this.touch.left) {
+      this.axisX = 1;
+    } else {
+      this.axisX = 0;
+    }
+  }
+
+  consume(action) {
+    this.consumed[action] = true;
+    this.bufferTimers[action] = 0;
   }
 
   isDown(action) {
@@ -214,6 +288,11 @@ export class InputController {
   }
 
   isJustPressed(action) {
+    // For buffered actions (attack, heavy, dash, jump)
+    if (['attack', 'heavy', 'dash'].includes(action)) {
+      return this.bufferTimers[action] > 0 && !this.consumed[action];
+    }
+    // Default raw just-pressed check
     return !!this.keys[action] && !this.prevKeys[action];
   }
 

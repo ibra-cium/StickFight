@@ -75,6 +75,7 @@ export class Fighter {
     this.comboCount = 0;
 
     // Attack hitbox & blade trail tracking
+    this.heavyVariant = 'overhead'; // 'overhead', 'uppercut', 'thrust'
     this.hasHitThisSwing = false;
     this.swordTrailPoints = [];
     this.trailEmitTimer = 0; // Keep emitting trail for 0.12s after attack ends
@@ -84,11 +85,27 @@ export class Fighter {
   }
 
   jump(force = 440) {
-    if (!this.isGrounded || ['dead', 'hit', 'knockback', 'victory', 'guard_broken', 'block', 'windup', 'attack', 'heavy_windup', 'heavy_attack'].includes(this.state)) return;
+    if (!this.isGrounded || ['dead', 'hit', 'knockback', 'victory', 'guard_broken', 'block', 'windup', 'attack', 'heavy_windup', 'heavy_attack', 'dash'].includes(this.state)) return;
     this.vy = -force;
     this.isGrounded = false;
     sound.playJump();
     particles.addDust(this.x, this.groundY, this.facing);
+  }
+
+  dash(direction = null) {
+    if (!this.isGrounded || ['dead', 'hit', 'knockback', 'victory', 'guard_broken', 'block', 'windup', 'attack', 'heavy_windup', 'heavy_attack', 'dash'].includes(this.state)) return;
+    const dir = direction !== null ? direction : this.facing;
+    const cost = 12;
+    if (this.stamina >= cost) {
+      this.stamina -= cost;
+      this.regenDelayTimer = this.regenDelay;
+    }
+    this.state = 'dash';
+    this.stateTimer = 0;
+    this.vx = dir * 360;
+    this.invulnerableTimer = 0.12;
+    sound.playSwing(false);
+    particles.addDust(this.x, this.groundY, -dir);
   }
 
   reset(x, facing = 1) {
@@ -111,12 +128,13 @@ export class Fighter {
     this.isBlocking = false;
     this.hurtTimer = 0;
     this.invulnerableTimer = 0;
+    this.heavyVariant = 'overhead';
     this.hasHitThisSwing = false;
     this.swordTrailPoints = [];
     this.trailEmitTimer = 0;
   }
 
-  startAttack(isHeavy = false) {
+  startAttack(isHeavy = false, variant = 'overhead') {
     if (this.attackCooldown > 0 || ['hit', 'knockback', 'dead', 'victory', 'guard_broken'].includes(this.state)) return false;
 
     const cost = isHeavy ? 35 : 15;
@@ -128,6 +146,7 @@ export class Fighter {
 
     this.stamina -= cost;
     this.regenDelayTimer = this.regenDelay;
+    this.heavyVariant = variant || 'overhead';
     this.state = isHeavy ? 'heavy_windup' : 'windup';
     this.stateTimer = 0;
     this.hasHitThisSwing = false;
@@ -459,20 +478,88 @@ export class Fighter {
         break;
       }
 
+      case 'crouch': {
+        // Low crouching posture
+        a.torso = 0.45;
+        a.head = -0.2;
+        a.rightShoulder = -0.2;
+        a.rightElbow = -1.2;
+        a.leftShoulder = 0.5;
+        a.leftElbow = 0.8;
+        a.swordAngle = 0.6;
+        a.rightHip = -0.6;
+        a.rightKnee = 1.1;
+        a.leftHip = 0.6;
+        a.leftKnee = 1.1;
+        break;
+      }
+
+      case 'dash': {
+        // Quick evasive slide forward
+        const progress = Math.min(1, this.stateTimer / 0.16);
+        a.torso = 0.55 * (1 - progress * 0.4);
+        a.head = -0.3;
+        a.rightShoulder = -1.2;
+        a.rightElbow = -0.8;
+        a.leftShoulder = 0.9;
+        a.leftElbow = 0.6;
+        a.swordAngle = -0.6;
+        a.rightHip = 0.7;
+        a.rightKnee = 0.4;
+        a.leftHip = -0.7;
+        a.leftKnee = 0.4;
+
+        if (this.stateTimer >= 0.16) {
+          this.state = 'idle';
+          this.stateTimer = 0;
+          this.attackCooldown = 0.08;
+        }
+        break;
+      }
+
       case 'heavy_windup': {
-        // Deep overhead windup & heavy anticipation lean
         const progress = Math.min(1, this.stateTimer / 0.32);
-        a.torso = -0.25 * progress;
-        a.head = 0.15 * progress;
-        a.rightShoulder = -2.2 * progress; // High overhead
-        a.rightElbow = -1.8 * progress;
-        a.leftShoulder = -1.5 * progress;
-        a.leftElbow = -1.2 * progress;
-        a.swordAngle = -1.2 * progress;
-        a.rightHip = -0.35 * progress;
-        a.rightKnee = 0.45 * progress + 0.2;
-        a.leftHip = 0.35 * progress;
-        a.leftKnee = 0.2;
+
+        if (this.heavyVariant === 'uppercut') {
+          // Low sword preparation for upward rising slash
+          a.torso = 0.25 * progress;
+          a.head = -0.1 * progress;
+          a.rightShoulder = 0.8 * progress; // Low back
+          a.rightElbow = -0.5 * progress;
+          a.leftShoulder = -0.8 * progress;
+          a.leftElbow = -0.6 * progress;
+          a.swordAngle = 1.2 * progress;
+          a.rightHip = 0.3 * progress;
+          a.rightKnee = 0.5 * progress + 0.2;
+          a.leftHip = -0.3 * progress;
+          a.leftKnee = 0.2;
+        } else if (this.heavyVariant === 'thrust') {
+          // Sword pulled back tight to chest for spear-like lunge
+          a.torso = -0.18 * progress;
+          a.head = 0.1 * progress;
+          a.rightShoulder = -1.1 * progress;
+          a.rightElbow = -2.0 * progress;
+          a.leftShoulder = 0.8 * progress;
+          a.leftElbow = 0.8 * progress;
+          a.swordAngle = -0.05 * progress;
+          a.rightHip = -0.4 * progress;
+          a.rightKnee = 0.4 * progress + 0.2;
+          a.leftHip = 0.4 * progress;
+          a.leftKnee = 0.2;
+        } else {
+          // Deep overhead windup & heavy anticipation lean (default 'overhead')
+          a.torso = -0.25 * progress;
+          a.head = 0.15 * progress;
+          a.rightShoulder = -2.2 * progress; // High overhead
+          a.rightElbow = -1.8 * progress;
+          a.leftShoulder = -1.5 * progress;
+          a.leftElbow = -1.2 * progress;
+          a.swordAngle = -1.2 * progress;
+          a.rightHip = -0.35 * progress;
+          a.rightKnee = 0.45 * progress + 0.2;
+          a.leftHip = 0.35 * progress;
+          a.leftKnee = 0.2;
+        }
 
         if (this.stateTimer >= 0.32) {
           this.state = 'heavy_attack';
@@ -483,28 +570,68 @@ export class Fighter {
       }
 
       case 'heavy_attack': {
-        // Forward heavy root motion burst on first 0.10s
-        if (this.stateTimer <= 0.10) {
-          this.vx = this.facing * 190;
-        } else {
-          this.vx = 0;
-        }
-
-        // Massive overhead cleave
         const progress = Math.min(1, this.stateTimer / 0.24);
         const ease = Math.sin((progress * Math.PI) / 2);
 
-        a.torso = -0.25 + 0.85 * ease;
-        a.head = -0.3 * ease;
-        a.rightShoulder = -2.2 + 3.8 * ease;
-        a.rightElbow = -1.8 + 1.6 * ease;
-        a.leftShoulder = -1.5 + 2.8 * ease;
-        a.leftElbow = -1.2 + 1.6 * ease;
-        a.swordAngle = -1.2 + 3.0 * ease;
-        a.rightHip = 0.5 * ease;
-        a.rightKnee = 0.2;
-        a.leftHip = -0.4 * ease;
-        a.leftKnee = 0.2;
+        if (this.heavyVariant === 'uppercut') {
+          // Rising upward slash with lift
+          if (this.stateTimer <= 0.10) {
+            this.vx = this.facing * 160;
+            this.vy = -80;
+          } else {
+            this.vx = 0;
+          }
+
+          a.torso = 0.25 - 0.65 * ease;
+          a.head = 0.2 * ease;
+          a.rightShoulder = 0.8 - 3.4 * ease; // Arc upward
+          a.rightElbow = -0.5 - 0.8 * ease;
+          a.leftShoulder = -0.8 + 1.6 * ease;
+          a.leftElbow = -0.6 + 1.2 * ease;
+          a.swordAngle = 1.2 - 3.0 * ease; // Swing sword skyward
+          a.rightHip = -0.3 * ease;
+          a.rightKnee = 0.2;
+          a.leftHip = 0.3 * ease;
+          a.leftKnee = 0.2;
+        } else if (this.heavyVariant === 'thrust') {
+          // Explosive forward thrust lunge
+          if (this.stateTimer <= 0.10) {
+            this.vx = this.facing * 240;
+          } else {
+            this.vx = 0;
+          }
+
+          a.torso = -0.18 + 0.55 * ease;
+          a.head = -0.2 * ease;
+          a.rightShoulder = -1.1 + 1.0 * ease;
+          a.rightElbow = -2.0 + 2.1 * ease; // Arm fully extended forward
+          a.leftShoulder = 0.8 - 0.4 * ease;
+          a.leftElbow = 0.8;
+          a.swordAngle = 0; // Blade horizontal straight ahead
+          a.rightHip = 0.55 * ease;
+          a.rightKnee = 0.2;
+          a.leftHip = -0.55 * ease;
+          a.leftKnee = 0.2;
+        } else {
+          // Massive overhead cleave (default 'overhead')
+          if (this.stateTimer <= 0.10) {
+            this.vx = this.facing * 190;
+          } else {
+            this.vx = 0;
+          }
+
+          a.torso = -0.25 + 0.85 * ease;
+          a.head = -0.3 * ease;
+          a.rightShoulder = -2.2 + 3.8 * ease;
+          a.rightElbow = -1.8 + 1.6 * ease;
+          a.leftShoulder = -1.5 + 2.8 * ease;
+          a.leftElbow = -1.2 + 1.6 * ease;
+          a.swordAngle = -1.2 + 3.0 * ease;
+          a.rightHip = 0.5 * ease;
+          a.rightKnee = 0.2;
+          a.leftHip = -0.4 * ease;
+          a.leftKnee = 0.2;
+        }
 
         if (this.stateTimer >= 0.24) {
           this.state = 'idle';

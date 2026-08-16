@@ -79,8 +79,8 @@ export class MenuUI {
         break;
     }
 
-    // Draw Audio Mute/Unmute in corner
-    this.drawSoundToggle(ctx, width, height);
+    // Draw Audio & Settings toggles in corners
+    this.drawSettingsToggles(ctx, width, height);
 
     ctx.restore();
   }
@@ -160,11 +160,17 @@ export class MenuUI {
     this.drawTitleDoodle(ctx, width / 2, height * 0.55);
 
     // Controls hints
-    renderer.sketchText(ctx, "Controls: A/D: Move  |  Space: Jump  |  Left Click: Attack  |  Right Click: Heavy  |  Shift: Block", width / 2, height * 0.72, {
-      font: "15px 'Architects Daughter', cursive",
+    renderer.sketchText(ctx, "Mobile: Left Joystick (Move/Guard) | Tap (Light) | Swipe (Heavy) | Double-Tap (Dash)", width / 2, height * 0.70, {
+      font: "14px 'Architects Daughter', cursive",
       color: '#444',
       align: 'center',
       seed: 13,
+    });
+    renderer.sketchText(ctx, "Desktop: A/D: Move  |  Space: Jump  |  Left-Click: Attack  |  Right-Click: Heavy  |  Shift: Block", width / 2, height * 0.74, {
+      font: "13px 'Architects Daughter', cursive",
+      color: '#666',
+      align: 'center',
+      seed: 14,
     });
 
     // Main Menu Action Buttons
@@ -449,20 +455,62 @@ export class MenuUI {
     });
   }
 
-  drawSoundToggle(ctx, width, height) {
-    const icon = sound.enabled ? "🔊 AUDIO ON" : "🔇 AUDIO OFF";
+  drawSettingsToggles(ctx, width, height) {
+    // 1. Audio Toggle (Right)
+    const audioIcon = sound.enabled ? "🔊 AUDIO ON" : "🔇 AUDIO OFF";
     this.drawButton(ctx, {
       id: 'btn_sound',
       x: width - 130,
       y: height - 42,
       w: 118,
       h: 30,
-      text: icon,
+      text: audioIcon,
       color: '#555',
       onClick: () => {
         sound.enabled = !sound.enabled;
         if (sound.enabled) sound.ensureContext();
         else sound.setRainIntensity(0);
+      },
+    });
+
+    // 2. Control Mode Toggle (Left): Gesture controls vs Button controls
+    const controlMode = localStorage.getItem('notebook_duel_control_mode') || 'gesture';
+    const isGesture = (controlMode === 'gesture');
+    const controlText = isGesture ? "🎮 GESTURE CTRL" : "🕹 BUTTON CTRL";
+
+    this.drawButton(ctx, {
+      id: 'btn_control_mode',
+      x: 16,
+      y: height - 42,
+      w: 140,
+      h: 30,
+      text: controlText,
+      color: isGesture ? '#1b5e20' : '#0d47a1',
+      onClick: () => {
+        const nextMode = isGesture ? 'buttons' : 'gesture';
+        localStorage.setItem('notebook_duel_control_mode', nextMode);
+        this.game.syncControlsUI();
+      },
+    });
+
+    // 3. Haptics Toggle (Middle-Left)
+    const hapticsEnabled = (localStorage.getItem('notebook_duel_haptics') || 'true') === 'true';
+    const hapticText = hapticsEnabled ? "📳 HAPTICS ON" : "📳 HAPTICS OFF";
+
+    this.drawButton(ctx, {
+      id: 'btn_haptics',
+      x: 164,
+      y: height - 42,
+      w: 125,
+      h: 30,
+      text: hapticText,
+      color: hapticsEnabled ? '#555' : '#888',
+      onClick: () => {
+        const nextHaptics = hapticsEnabled ? 'false' : 'true';
+        localStorage.setItem('notebook_duel_haptics', nextHaptics);
+        if (nextHaptics === 'true' && typeof navigator !== 'undefined' && navigator.vibrate) {
+          try { navigator.vibrate(20); } catch(e) {}
+        }
       },
     });
   }
