@@ -1,6 +1,6 @@
 // Procedural Hand-Drawn Weather & Rain Engine
 
-import { renderer } from './NotebookRenderer.js?v=4';
+import { renderer } from './NotebookRenderer.js';
 import { particles } from './Particles.js';
 import { sound } from '../core/Audio.js';
 

@@ -123,6 +123,18 @@ html, body {
   background: rgba(255, 200, 190, 0.95);
 }
 
+.heavy-btn {
+  width: 76px;
+  height: 76px;
+  background: rgba(255, 243, 224, 0.9);
+  border-color: #e65100;
+  color: #e65100;
+}
+
+.heavy-btn:active, .heavy-btn.active {
+  background: rgba(255, 224, 178, 0.95);
+}
+
 .block-btn {
   width: 76px;
   height: 76px;
@@ -135,6 +147,18 @@ html, body {
   background: rgba(190, 225, 255, 0.95);
 }
 
+.jump-btn {
+  width: 72px;
+  height: 72px;
+  background: rgba(240, 255, 240, 0.9);
+  border-color: #2e7d32;
+  color: #2e7d32;
+}
+
+.jump-btn:active, .jump-btn.active {
+  background: rgba(200, 245, 200, 0.95);
+}
+
 /* Notebook Hand-Drawn Buttons */
 .sketch-btn {
   position: relative;
@@ -142,12 +166,8 @@ html, body {
 }
 
 @media (min-width: 900px) and (hover: hover) {
-  /* On desktop with mouse/keyboard, keep touch controls subtle or optional */
+  /* On desktop with mouse/keyboard, hide touch controls completely */
   .touch-controls {
-    opacity: 0.75;
-    transition: opacity 0.2s;
-  }
-  .touch-controls:hover {
-    opacity: 1;
+    display: none;
   }
 }

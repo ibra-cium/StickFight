@@ -1,6 +1,6 @@
 // Procedural Stickman Skeleton & Dynamic Inverse Kinematics / Forward Kinematics
 
-import { renderer } from '../graphics/NotebookRenderer.js?v=4';
+import { renderer } from '../graphics/NotebookRenderer.js';
 
 export class Skeleton {
   constructor(config = {}) {
@@ -39,6 +39,7 @@ export class Skeleton {
       rightKnee: 0.2,
       swordAngle: -0.4,
     };
+    this.targetAngles = { ...this.angles };
 
     // Computed World Positions of key joints for collision & sword trail
     this.joints = {
@@ -55,62 +56,64 @@ export class Skeleton {
   }
 
   // Calculate forward kinematics joint positions
-  computeJoints(rootX, rootY, facing = 1, seed = 0) {
+  computeJoints(rootX, rootY, facing = 1, seed = 0, squash = 1) {
     const f = facing; // 1 = facing right, -1 = facing left
+    const sx = 2 - squash;
+    const sy = squash;
 
     // Hips / Root
     this.joints.hips = { x: rootX, y: rootY };
 
     // Torso -> Chest
     const torsoAngle = this.angles.torso * f;
-    const chestX = rootX + Math.sin(torsoAngle) * this.torsoLength;
-    const chestY = rootY - Math.cos(torsoAngle) * this.torsoLength;
+    const chestX = rootX + Math.sin(torsoAngle) * this.torsoLength * sx;
+    const chestY = rootY - Math.cos(torsoAngle) * this.torsoLength * sy;
     this.joints.chest = { x: chestX, y: chestY };
 
     // Neck -> Head
     const headAngle = torsoAngle + this.angles.head * f;
-    const headX = chestX + Math.sin(headAngle) * (this.headRadius * 1.3);
-    const headY = chestY - Math.cos(headAngle) * (this.headRadius * 1.3);
+    const headX = chestX + Math.sin(headAngle) * (this.headRadius * 1.3) * sx;
+    const headY = chestY - Math.cos(headAngle) * (this.headRadius * 1.3) * sy;
     this.joints.head = { x: headX, y: headY };
 
     // Right Arm (Weapon Arm - Primary)
     const rShoulderAngle = torsoAngle + this.angles.rightShoulder * f;
-    const rElbowX = chestX + Math.sin(rShoulderAngle) * this.upperArmLength;
-    const rElbowY = chestY + Math.cos(rShoulderAngle) * this.upperArmLength;
+    const rElbowX = chestX + Math.sin(rShoulderAngle) * this.upperArmLength * sx;
+    const rElbowY = chestY + Math.cos(rShoulderAngle) * this.upperArmLength * sy;
 
     const rElbowAngle = rShoulderAngle + this.angles.rightElbow * f;
-    const rHandX = rElbowX + Math.sin(rElbowAngle) * this.forearmLength;
-    const rHandY = rElbowY + Math.cos(rElbowAngle) * this.forearmLength;
+    const rHandX = rElbowX + Math.sin(rElbowAngle) * this.forearmLength * sx;
+    const rHandY = rElbowY + Math.cos(rElbowAngle) * this.forearmLength * sy;
     this.joints.rightHand = { x: rHandX, y: rHandY };
 
     // Left Arm (Off hand / support)
     const lShoulderAngle = torsoAngle + this.angles.leftShoulder * f;
-    const lElbowX = chestX + Math.sin(lShoulderAngle) * this.upperArmLength;
-    const lElbowY = chestY + Math.cos(lShoulderAngle) * this.upperArmLength;
+    const lElbowX = chestX + Math.sin(lShoulderAngle) * this.upperArmLength * sx;
+    const lElbowY = chestY + Math.cos(lShoulderAngle) * this.upperArmLength * sy;
 
     const lElbowAngle = lShoulderAngle + this.angles.leftElbow * f;
-    const lHandX = lElbowX + Math.sin(lElbowAngle) * this.forearmLength;
-    const lHandY = lElbowY + Math.cos(lElbowAngle) * this.forearmLength;
+    const lHandX = lElbowX + Math.sin(lElbowAngle) * this.forearmLength * sx;
+    const lHandY = lElbowY + Math.cos(lElbowAngle) * this.forearmLength * sy;
     this.joints.leftHand = { x: lHandX, y: lHandY };
 
     // Right Leg (Back / Front depending on stance)
     const rHipAngle = this.angles.rightHip * f;
-    const rKneeX = rootX + Math.sin(rHipAngle) * this.upperLegLength;
-    const rKneeY = rootY + Math.cos(rHipAngle) * this.upperLegLength;
+    const rKneeX = rootX + Math.sin(rHipAngle) * this.upperLegLength * sx;
+    const rKneeY = rootY + Math.cos(rHipAngle) * this.upperLegLength * sy;
 
     const rKneeAngle = rHipAngle + this.angles.rightKnee * f;
-    const rFootX = rKneeX + Math.sin(rKneeAngle) * this.lowerLegLength;
-    const rFootY = rKneeY + Math.cos(rKneeAngle) * this.lowerLegLength;
+    const rFootX = rKneeX + Math.sin(rKneeAngle) * this.lowerLegLength * sx;
+    const rFootY = rKneeY + Math.cos(rKneeAngle) * this.lowerLegLength * sy;
     this.joints.rightFoot = { x: rFootX, y: rFootY };
 
     // Left Leg
     const lHipAngle = this.angles.leftHip * f;
-    const lKneeX = rootX + Math.sin(lHipAngle) * this.upperLegLength;
-    const lKneeY = rootY + Math.cos(lHipAngle) * this.upperLegLength;
+    const lKneeX = rootX + Math.sin(lHipAngle) * this.upperLegLength * sx;
+    const lKneeY = rootY + Math.cos(lHipAngle) * this.upperLegLength * sy;
 
     const lKneeAngle = lHipAngle + this.angles.leftKnee * f;
-    const lFootX = lKneeX + Math.sin(lKneeAngle) * this.lowerLegLength;
-    const lFootY = lKneeY + Math.cos(lKneeAngle) * this.lowerLegLength;
+    const lFootX = lKneeX + Math.sin(lKneeAngle) * this.lowerLegLength * sx;
+    const lFootY = lKneeY + Math.cos(lKneeAngle) * this.lowerLegLength * sy;
     this.joints.leftFoot = { x: lFootX, y: lFootY };
 
     // Sword (attached to Right Hand)
@@ -132,8 +135,8 @@ export class Skeleton {
   }
 
   // Draw the entire procedural stickman and sword
-  draw(ctx, rootX, rootY, facing = 1, seed = 0, isHurt = false) {
-    const k = this.computeJoints(rootX, rootY, facing, seed);
+  draw(ctx, rootX, rootY, facing = 1, seed = 0, isHurt = false, squash = 1) {
+    const k = this.computeJoints(rootX, rootY, facing, seed, squash);
     const color = isHurt ? '#b71c1c' : this.color;
     const strokeW = this.strokeWidth;
 

@@ -4,27 +4,30 @@ A fast-paced hand-drawn notebook stickman sword fighting duel game built with HT
 
 ## Features
 - Hand-drawn pencil / ballpoint sketchbook aesthetics & sound effects (synthesized AudioContext SFX)
-- Multiple game modes:
-  - **1 Player**: Arcade Ladder vs AI with progressive difficulty & boss battles
-  - **2 Players**: Local versus mode
-  - **Practice / Dojo**: Master timing, parries, dashes, and strikes with customizable dummy AI
-  - **Survival**: Endless waves of stick fighters
+- 10 Progressive arcade ladder pages vs AI enemies culminating in the Ink Titan boss battle
 - Combat Mechanics:
-  - Slash, Thrust, Jump Attacks, Dash Attacks
-  - Defensive Block, Perfect Parries, Guard Breaks, and Clashes
-  - Fluid ragdoll / procedural stick animations & particle effects
+  - Light Attack combos
+  - Heavy Attack & Aerial Downward Plunge Attack
+  - Defensive Block, Parries, Guard Breaks, and Clashes
+  - Fluid procedural stickman skeleton animations & particle effects
+- Responsive mobile touch controls overlay
 
 ## Controls
-- **Player 1**:
-  - Movement: `A` / `D` (Left / Right), `W` (Jump), `S` (Crouch / Drop)
-  - Attack: `J` (Slash), `U` (Thrust)
-  - Dash: `K`
-  - Guard / Block: `L`
-- **Player 2**:
-  - Movement: Arrow Keys (`Left`, `Right`, `Up`, `Down`)
-  - Attack: `Numpad 1` / `[` (Slash), `Numpad 4` / `P` (Thrust)
-  - Dash: `Numpad 2` / `]`
-  - Guard / Block: `Numpad 3` / `'`
+
+### Keyboard & Mouse
+- **Move Left / Right**: `A` / `D` or `Left Arrow` / `Right Arrow`
+- **Jump**: `Space` / `W` / `Up Arrow`
+- **Light Attack**: `Left Mouse Button` / `J` / `Z`
+- **Heavy Attack**: `Right Mouse Button` / `X` / `L`
+- **Aerial Heavy Attack**: Attack while in the air (applies downward plunge momentum)
+- **Block / Guard**: `Shift` / `K` / `C`
+
+### On-Screen Touch Controls (Mobile / Tablets)
+- **LEFT** / **RIGHT**: Movement
+- **JUMP**: Jump
+- **ATTACK**: Light Attack
+- **HEAVY**: Heavy Attack
+- **BLOCK**: Guard / Block
 
 ## How to Play
 Open `index.html` in any modern web browser or serve with a local web server (e.g., `npx serve .` or Live Server).

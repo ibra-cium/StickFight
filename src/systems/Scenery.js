@@ -1,6 +1,6 @@
 // Procedural Hand-Drawn Notebook Scenery (Trees, Clouds, Fences, Grass Tufts)
 
-import { renderer } from '../graphics/NotebookRenderer.js?v=4';
+import { renderer } from '../graphics/NotebookRenderer.js';
 
 export class ScenerySystem {
   constructor() {

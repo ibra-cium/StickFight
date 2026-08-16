@@ -1,6 +1,6 @@
 // Hand-Drawn Pencil HUD (Health Bars, Level Header, Announcer Banners)
 
-import { renderer } from '../graphics/NotebookRenderer.js?v=4';
+import { renderer } from '../graphics/NotebookRenderer.js';
 
 export class HUD {
   constructor() {
@@ -63,6 +63,31 @@ export class HUD {
         align: 'left',
         seed: 3,
       });
+
+      // Player Stamina Bar (Thinner, Green #4a7c3f, Flashes Red on Refusal)
+      const sTopMargin = topMargin + barH + 6;
+      const sBarH = 8;
+      const pStaminaRatio = Math.max(0, player.stamina / player.maxStamina);
+      const isPlayerFlashing = player.staminaFlashTimer > 0;
+      const staminaColor = isPlayerFlashing ? '#c62828' : '#4a7c3f';
+
+      renderer.sketchBox(ctx, pLeft, sTopMargin, barW, sBarH, {
+        color: isPlayerFlashing ? '#c62828' : '#2b2b2b',
+        width: isPlayerFlashing ? 2.0 : 1.4,
+        seed: 10,
+      });
+
+      if (pStaminaRatio > 0) {
+        const sFillW = Math.max(2, (barW - 4) * pStaminaRatio);
+        renderer.sketchHatch(ctx, pLeft + 2, sTopMargin + 1, sFillW, sBarH - 2, 45, 4, staminaColor);
+      }
+
+      renderer.sketchText(ctx, `${Math.ceil(player.stamina)} SP`, pLeft + barW + 12, sTopMargin + sBarH / 2, {
+        font: "12px 'Architects Daughter', cursive",
+        color: staminaColor,
+        align: 'left',
+        seed: 11,
+      });
     }
 
     // 2. Enemy Health Bar (Right)
@@ -99,6 +124,31 @@ export class HUD {
         color: '#333',
         align: 'right',
         seed: 6,
+      });
+
+      // Enemy Stamina Bar (Thinner, Green #4a7c3f, Flashes Red on Refusal)
+      const sTopMargin = topMargin + barH + 6;
+      const sBarH = 8;
+      const eStaminaRatio = Math.max(0, enemy.stamina / enemy.maxStamina);
+      const isEnemyFlashing = enemy.staminaFlashTimer > 0;
+      const enemyStaminaColor = isEnemyFlashing ? '#c62828' : '#4a7c3f';
+
+      renderer.sketchBox(ctx, eLeft, sTopMargin, barW, sBarH, {
+        color: isEnemyFlashing ? '#c62828' : (enemy.isBoss ? '#5c0000' : '#2b2b2b'),
+        width: isEnemyFlashing ? 2.0 : 1.4,
+        seed: 12,
+      });
+
+      if (eStaminaRatio > 0) {
+        const sFillW = Math.max(2, (barW - 4) * eStaminaRatio);
+        renderer.sketchHatch(ctx, eRight - 2 - sFillW, sTopMargin + 1, sFillW, sBarH - 2, -45, 4, enemyStaminaColor);
+      }
+
+      renderer.sketchText(ctx, `${Math.ceil(enemy.stamina)} SP`, eLeft - 12, sTopMargin + sBarH / 2, {
+        font: "12px 'Architects Daughter', cursive",
+        color: enemyStaminaColor,
+        align: 'right',
+        seed: 13,
       });
     }
 

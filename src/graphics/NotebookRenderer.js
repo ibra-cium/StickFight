@@ -7,8 +7,13 @@ export class NotebookRenderer {
     this.lastBoilTime = 0;
     this.boilRate = 1000 / 12; // 12 FPS line jitter for authentic flipbook feel
     this.paperNoiseCanvas = null;
+    this.whiteFlashTimer = 0;
 
     this.createPaperTexture();
+  }
+
+  flashWhite(duration = 0.08) {
+    this.whiteFlashTimer = Math.max(this.whiteFlashTimer, duration);
   }
 
   createPaperTexture() {
@@ -31,12 +36,18 @@ export class NotebookRenderer {
     this.paperNoiseCanvas = c;
   }
 
-  update(timestamp = performance.now()) {
-    if (timestamp - this.lastBoilTime > this.boilRate) {
-      this.lastBoilTime = timestamp;
+  update(dtOrTimestamp = performance.now()) {
+    const now = performance.now();
+    if (now - this.lastBoilTime > this.boilRate) {
+      this.lastBoilTime = now;
       this.boilIndex = (this.boilIndex + 1) % 8;
     }
     this.frameCounter++;
+
+    if (this.whiteFlashTimer > 0) {
+      const dt = typeof dtOrTimestamp === 'number' && dtOrTimestamp < 1.0 ? dtOrTimestamp : 1 / 60;
+      this.whiteFlashTimer -= dt;
+    }
   }
 
   // Deterministic fast pseudo-random offset based on boilIndex & seed
@@ -54,8 +65,10 @@ export class NotebookRenderer {
   drawPaperBackground(ctx, width, height, camera, lightning = 0) {
     ctx.save();
 
-    // Base paper tone
-    if (lightning > 0.05) {
+    // Base paper tone: check white flash (parry) or lightning
+    if (this.whiteFlashTimer > 0) {
+      ctx.fillStyle = '#ffffff';
+    } else if (lightning > 0.05) {
       // Lightning flash makes paper bright white
       const flash = Math.min(1, lightning);
       ctx.fillStyle = `rgb(${Math.floor(251 + 4 * flash)}, ${Math.floor(248 + 7 * flash)}, ${Math.floor(235 + 20 * flash)})`;

@@ -1,5 +1,7 @@
 // Combat & Hit Detection Engine (Blade Line vs Hurtbox Circle collision, Parry & Knockback)
 
+import { renderer } from '../graphics/NotebookRenderer.js';
+
 export class CombatSystem {
   constructor(camera) {
     this.camera = camera;
@@ -38,19 +40,30 @@ export class CombatSystem {
       const result = defender.takeDamage(power, knockback, attacker.x, isHeavy);
 
       if (result.type === 'parry') {
-        // Attacker gets staggered by the parry!
+        // Attacker gets staggered by the parry & drained of 25 stamina
         attacker.state = 'hit';
         attacker.stateTimer = 0;
-        attacker.vx = -attacker.facing * 180;
-        attacker.attackCooldown = 0.5;
-        this.camera.shake(9);
-        this.camera.hitstop(4);
+        attacker.vx = -attacker.facing * 200;
+        attacker.attackCooldown = 0.6;
+        attacker.stamina = Math.max(0, attacker.stamina - 25);
+        attacker.regenDelayTimer = attacker.regenDelay;
+
+        this.camera.shake(12);
+        this.camera.hitstop(0.15); // 0.15s hitstop
+        renderer.flashWhite(0.08); // Flash paper white for 0.08s
+      } else if (result.type === 'guard_break') {
+        this.camera.shake(10);
+        this.camera.hitstop(0.08);
       } else if (result.type === 'block') {
         this.camera.shake(4);
-        this.camera.hitstop(2);
+        this.camera.hitstop(0.035);
       } else if (result.type === 'hit' || result.type === 'death') {
         this.camera.shake(isHeavy ? 14 : 7);
-        this.camera.hitstop(isHeavy ? 5 : 3);
+        this.camera.hitstop(isHeavy ? 0.085 : 0.05);
+        this.camera.triggerHitZoom(isHeavy);
+        if (result.type === 'death') {
+          this.camera.triggerSlowMo(0.5, 0.25);
+        }
       }
     }
   }

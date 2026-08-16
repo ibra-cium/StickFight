@@ -1,6 +1,6 @@
 // Procedural Hand-Drawn Particle System for Notebook Duel
 
-import { renderer } from './NotebookRenderer.js?v=4';
+import { renderer } from './NotebookRenderer.js';
 
 export class ParticleSystem {
   constructor() {
@@ -49,11 +49,62 @@ export class ParticleSystem {
     });
   }
 
-  // Add perfect parry shockwave/starburst
+  // Add perfect parry shockwave/ink spark burst & large PARRY! popup (0.6s duration)
   addParryEffect(x, y) {
+    // 1. Burst of ink sparks and dark flecks
+    const sparkCount = 20;
+    for (let i = 0; i < sparkCount; i++) {
+      const angle = (i / sparkCount) * Math.PI * 2 + (Math.random() - 0.5) * 0.3;
+      const speed = 200 + Math.random() * 220;
+      const inkColors = ['#0d47a1', '#1a237e', '#01579b', '#111111', '#0d47a1'];
+      this.particles.push({
+        type: 'spark',
+        x,
+        y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        length: 14 + Math.random() * 16,
+        life: 1.0,
+        decay: 2.8,
+        color: inkColors[i % inkColors.length],
+        seed: Math.random() * 100,
+      });
+    }
+
+    // Impact star doodles
+    for (let s = 0; s < 2; s++) {
+      this.particles.push({
+        type: 'impact_star',
+        x: x + (Math.random() - 0.5) * 20,
+        y: y + (Math.random() - 0.5) * 20,
+        vx: (Math.random() - 0.5) * 30,
+        vy: (Math.random() - 0.5) * 30,
+        size: 20 + Math.random() * 10,
+        life: 1.0,
+        decay: 4.5,
+        color: '#0d47a1',
+        seed: Math.random() * 100,
+      });
+    }
+
+    // Large hand-drawn "PARRY!" popup in Permanent Marker for 0.6s
+    this.damageTexts.push({
+      text: 'PARRY!',
+      x,
+      y: y - 28,
+      vy: -55,
+      life: 1.0,
+      decay: 1.0 / 0.6, // Exactly 0.6s duration
+      color: '#0d47a1',
+      scale: 1.7, // Large prominent text
+    });
+  }
+
+  // Guard break particle burst and popup
+  addGuardBreakEffect(x, y) {
     for (let i = 0; i < 16; i++) {
-      const angle = (i / 16) * Math.PI * 2 + (Math.random() - 0.5) * 0.2;
-      const speed = 180 + Math.random() * 140;
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 140 + Math.random() * 200;
       this.particles.push({
         type: 'spark',
         x,
@@ -62,21 +113,21 @@ export class ParticleSystem {
         vy: Math.sin(angle) * speed,
         length: 12 + Math.random() * 14,
         life: 1.0,
-        decay: 3.0,
-        color: '#0d47a1', // Inky blue spark
+        decay: 2.5,
+        color: '#c62828',
         seed: Math.random() * 100,
       });
     }
 
     this.damageTexts.push({
-      text: 'PARRY!',
+      text: 'GUARD BREAK!',
       x,
-      y: y - 25,
-      vy: -60,
+      y: y - 35,
+      vy: -45,
       life: 1.0,
-      decay: 1.5,
-      color: '#0d47a1',
-      scale: 1.3,
+      decay: 1.0 / 0.9, // 0.9s duration
+      color: '#c62828',
+      scale: 1.4,
     });
   }
 
@@ -186,26 +237,37 @@ export class ParticleSystem {
   }
 
   draw(ctx) {
-    // 1. Draw slash trails (hand-drawn motion arcs)
+    // 1. Draw slash trails (hand-drawn motion arcs with alpha fading along the tail)
     for (const trail of this.slashTrails) {
-      if (trail.points.length < 2) continue;
+      const n = trail.points.length;
+      if (n < 2) continue;
       ctx.save();
-      ctx.globalAlpha = Math.max(0, trail.life * 0.85);
 
-      for (let pass = 0; pass < 2; pass++) {
-        ctx.beginPath();
-        const p0 = trail.points[0];
-        ctx.moveTo(p0.x, p0.y);
-        for (let j = 1; j < trail.points.length; j++) {
-          const pt = trail.points[j];
-          const jit = renderer.getJitter(trail.seed + j * 5 + pass * 10, 1.2);
-          ctx.lineTo(pt.x + jit.x, pt.y + jit.y);
+      for (let j = 1; j < n; j++) {
+        const pPrev = trail.points[j - 1];
+        const pCurr = trail.points[j];
+        // Fade alpha and width along the tail: index 0 (oldest) is faint, tip is vibrant
+        const tailFactor = j / (n - 1);
+        const segAlpha = Math.max(0, Math.min(1, trail.life * 0.9 * (0.15 + 0.85 * tailFactor)));
+
+        ctx.save();
+        ctx.globalAlpha = segAlpha;
+
+        for (let pass = 0; pass < 2; pass++) {
+          const jit1 = renderer.getJitter(trail.seed + (j - 1) * 5 + pass * 10, 1.2);
+          const jit2 = renderer.getJitter(trail.seed + j * 5 + pass * 10, 1.2);
+
+          ctx.beginPath();
+          ctx.moveTo(pPrev.x + jit1.x, pPrev.y + jit1.y);
+          ctx.lineTo(pCurr.x + jit2.x, pCurr.y + jit2.y);
+          ctx.strokeStyle = trail.color;
+          ctx.lineWidth = trail.width * (0.3 + 0.7 * tailFactor) * trail.life * (pass === 0 ? 1.2 : 0.7);
+          ctx.lineCap = 'round';
+          ctx.stroke();
         }
-        ctx.strokeStyle = trail.color;
-        ctx.lineWidth = trail.width * trail.life * (pass === 0 ? 1.2 : 0.7);
-        ctx.lineCap = 'round';
-        ctx.stroke();
+        ctx.restore();
       }
+
       ctx.restore();
     }
 

@@ -15,15 +15,13 @@ export class Player extends Fighter {
       scale: 1.0,
       ...config,
     });
-
-    this.lastAttackTapTime = 0;
   }
 
   handleInput(input, opponent) {
-    if (['dead', 'hit', 'knockback', 'victory'].includes(this.state)) return;
+    if (['dead', 'hit', 'knockback', 'victory', 'guard_broken'].includes(this.state)) return;
 
     // Determine auto-facing when idle/moving
-    if (!['attack', 'heavy_attack', 'windup', 'heavy_windup', 'block'].includes(this.state)) {
+    if (!['attack', 'heavy_attack', 'windup', 'heavy_windup', 'block', 'guard_broken'].includes(this.state)) {
       if (opponent && !opponent.isGrounded && this.isGrounded) {
         // keep current facing
       } else if (opponent) {
@@ -32,33 +30,21 @@ export class Player extends Fighter {
     }
 
     // 1. Jump Input (Space / W / ArrowUp)
-    if (input.isJustPressed('jump') && this.isGrounded && !['block', 'windup', 'attack', 'heavy_windup', 'heavy_attack'].includes(this.state)) {
+    if (input.isJustPressed('jump') && this.isGrounded && !['block', 'windup', 'attack', 'heavy_windup', 'heavy_attack', 'guard_broken'].includes(this.state)) {
       this.jump();
     }
 
-    // 2. Attack Input (Right Mouse Button / Attack Key)
-    if (input.isJustPressed('attack')) {
-      const now = performance.now();
-      const isDoubleTap = (now - this.lastAttackTapTime < 260);
-      this.lastAttackTapTime = now;
-
-      // Jump + Right Mouse Button (airborne attack or jump-attack combo) = Heavy Attack
-      const isAirborne = !this.isGrounded;
-      const isJumpAttack = isAirborne || input.isDown('jump');
-
-      if (isJumpAttack || input.isDown('heavy') || isDoubleTap) {
-        this.startAttack(true); // Heavy attack
-        if (isAirborne) {
-          this.vx = this.facing * 200; // Aerial downward plunge momentum
-        }
-      } else {
-        this.startAttack(false); // Normal attack
+    // 2. Attack Input
+    if (input.isJustPressed('heavy') || (input.isJustPressed('attack') && !this.isGrounded)) {
+      this.startAttack(true); // Heavy attack
+      if (!this.isGrounded) {
+        this.vx = this.facing * 200; // Aerial downward plunge momentum
       }
       return;
     }
 
-    if (input.isJustPressed('heavy')) {
-      this.startAttack(true);
+    if (input.isJustPressed('attack')) {
+      this.startAttack(false); // Normal attack
       return;
     }
 
@@ -74,7 +60,7 @@ export class Player extends Fighter {
     }
 
     // 4. Movement Input (Left / Right)
-    if (['windup', 'attack', 'heavy_windup', 'heavy_attack', 'block'].includes(this.state)) {
+    if (['windup', 'attack', 'heavy_windup', 'heavy_attack', 'block', 'guard_broken'].includes(this.state)) {
       return;
     }
 

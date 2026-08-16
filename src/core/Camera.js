@@ -15,14 +15,21 @@ export class Camera {
     this.minZoom = 0.85;
     this.maxZoom = 1.25;
 
+    // Hit impact zoom punch
+    this.hitZoom = 1.0;
+
     // Shake properties
     this.shakeIntensity = 0;
     this.shakeDecay = 0.9;
     this.shakeOffsetX = 0;
     this.shakeOffsetY = 0;
 
-    // Hitstop / freeze frame counter
-    this.hitstopFrames = 0;
+    // Hitstop / freeze frame timer (in seconds)
+    this.hitstopTimer = 0;
+
+    // Slow motion on killing blow
+    this.slowMoTimer = 0;
+    this.slowMoScale = 0.25;
   }
 
   resize(viewportWidth, viewportHeight) {
@@ -34,14 +41,30 @@ export class Camera {
     this.shakeIntensity = Math.max(this.shakeIntensity, intensity);
   }
 
-  hitstop(frames = 3) {
-    this.hitstopFrames = Math.max(this.hitstopFrames, frames);
+  hitstop(duration = 0.05) {
+    this.hitstopTimer = Math.max(this.hitstopTimer, duration);
+  }
+
+  triggerHitZoom(isHeavy = false) {
+    this.hitZoom = isHeavy ? 1.09 : 1.05;
+  }
+
+  triggerSlowMo(duration = 0.5, scale = 0.25) {
+    this.slowMoTimer = duration;
+    this.slowMoScale = scale;
   }
 
   update(fighter1, fighter2, dt = 1/60) {
-    if (this.hitstopFrames > 0) {
-      this.hitstopFrames--;
+    if (this.hitstopTimer > 0) {
+      this.hitstopTimer -= dt;
     }
+
+    if (this.slowMoTimer > 0) {
+      this.slowMoTimer -= dt;
+    }
+
+    // Ease hitZoom back to 1.0 over ~0.25s
+    this.hitZoom += (1.0 - this.hitZoom) * (1 - Math.exp(-12 * dt));
 
     if (fighter1 && fighter2) {
       // Midpoint between fighters
@@ -65,16 +88,16 @@ export class Camera {
       this.targetZoom = 1.0;
     }
 
-    // Smooth follow
-    this.x += (this.targetX - this.x) * 0.1;
-    this.y += (this.targetY - this.y) * 0.1;
-    this.zoom += (this.targetZoom - this.zoom) * 0.08;
+    // Smooth follow (Framerate Independent)
+    this.x += (this.targetX - this.x) * (1 - Math.exp(-10 * dt));
+    this.y += (this.targetY - this.y) * (1 - Math.exp(-10 * dt));
+    this.zoom += (this.targetZoom - this.zoom) * (1 - Math.exp(-8 * dt));
 
     // Shake decay and random offset
     if (this.shakeIntensity > 0.1) {
       this.shakeOffsetX = (Math.random() * 2 - 1) * this.shakeIntensity;
       this.shakeOffsetY = (Math.random() * 2 - 1) * this.shakeIntensity;
-      this.shakeIntensity *= this.shakeDecay;
+      this.shakeIntensity *= Math.pow(this.shakeDecay, dt * 60);
     } else {
       this.shakeIntensity = 0;
       this.shakeOffsetX = 0;
@@ -86,7 +109,8 @@ export class Camera {
     ctx.save();
     // Center origin
     ctx.translate(this.width / 2 + this.shakeOffsetX, this.height / 2 + this.shakeOffsetY);
-    ctx.scale(this.zoom, this.zoom);
+    const totalZoom = this.zoom * this.hitZoom;
+    ctx.scale(totalZoom, totalZoom);
     ctx.translate(-this.x, -this.y);
   }
 
@@ -97,9 +121,10 @@ export class Camera {
   worldToScreen(worldX, worldY) {
     const cx = this.width / 2 + this.shakeOffsetX;
     const cy = this.height / 2 + this.shakeOffsetY;
+    const totalZoom = this.zoom * this.hitZoom;
     return {
-      x: cx + (worldX - this.x) * this.zoom,
-      y: cy + (worldY - this.y) * this.zoom,
+      x: cx + (worldX - this.x) * totalZoom,
+      y: cy + (worldY - this.y) * totalZoom,
     };
   }
 }

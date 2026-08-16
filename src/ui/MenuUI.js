@@ -1,6 +1,6 @@
 // Hand-Drawn Notebook Menus: Title Screen, Level Select, Victory, and Game Over
 
-import { renderer } from '../graphics/NotebookRenderer.js?v=4';
+import { renderer } from '../graphics/NotebookRenderer.js';
 import { LEVEL_CONFIGS } from '../systems/LevelSystem.js';
 import { sound } from '../core/Audio.js';
 
@@ -160,7 +160,7 @@ export class MenuUI {
     this.drawTitleDoodle(ctx, width / 2, height * 0.55);
 
     // Controls hints
-    renderer.sketchText(ctx, "Controls: A/D: Move  |  Space: Jump  |  Right Click: Attack  |  Jump + Right Click: Heavy  |  Shift: Block", width / 2, height * 0.72, {
+    renderer.sketchText(ctx, "Controls: A/D: Move  |  Space: Jump  |  Left Click: Attack  |  Right Click: Heavy  |  Shift: Block", width / 2, height * 0.72, {
       font: "15px 'Architects Daughter', cursive",
       color: '#444',
       align: 'center',

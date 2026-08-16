@@ -35,7 +35,7 @@ export class EnemyAI extends Fighter {
   }
 
   updateAI(dt, player) {
-    if (['dead', 'victory'].includes(this.state)) return;
+    if (['dead', 'victory', 'guard_broken'].includes(this.state)) return;
     if (!player || player.state === 'dead') {
       this.state = 'idle';
       this.vx = 0;
@@ -43,7 +43,7 @@ export class EnemyAI extends Fighter {
     }
 
     // Auto facing
-    if (!['attack', 'heavy_attack', 'windup', 'heavy_windup', 'block'].includes(this.state)) {
+    if (!['attack', 'heavy_attack', 'windup', 'heavy_windup', 'block', 'guard_broken'].includes(this.state)) {
       this.facing = player.x >= this.x ? 1 : -1;
     }
 
@@ -53,10 +53,10 @@ export class EnemyAI extends Fighter {
 
     // React to being in hit or knockback state
     if (['hit', 'knockback'].includes(this.state)) {
-      // Chance to retreat immediately after recovering
-      if (Math.random() < 0.6) {
+      // Chance to retreat immediately after recovering, especially if stamina is low
+      if (this.stamina < 35 || Math.random() < 0.6) {
         this.aiState = 'RETREAT';
-        this.retreatTimer = 0.5 + Math.random() * 0.4;
+        this.retreatTimer = 0.6 + Math.random() * 0.4;
       }
       return;
     }
@@ -69,11 +69,13 @@ export class EnemyAI extends Fighter {
     // Handle Active Blocking
     if (this.state === 'block') {
       this.blockDuration -= dt;
-      if (this.blockDuration <= 0) {
+      // Drop block early if stamina gets critically low to avoid guard break
+      if (this.blockDuration <= 0 || this.stamina < 20) {
         this.stopBlock();
-        // Chance to immediately counterattack
-        if (Math.random() < this.counterRate && this.aiAttackCooldown <= 0) {
-          this.startAttack(this.isBoss ? Math.random() < 0.4 : false);
+        // Chance to immediately counterattack if stamina permits
+        if (Math.random() < this.counterRate && this.aiAttackCooldown <= 0 && this.stamina >= 15) {
+          const isHeavy = this.isBoss && this.stamina >= 35 ? Math.random() < 0.4 : false;
+          this.startAttack(isHeavy);
           this.aiAttackCooldown = this.attackInterval;
         }
       }
@@ -82,14 +84,24 @@ export class EnemyAI extends Fighter {
 
     const dist = Math.abs(player.x - this.x);
 
-    // Defensive Reaction: If player is winding up an attack nearby, chance to block
+    // Defensive Reaction: If player is winding up an attack nearby, chance to block if stamina is sufficient
     if (['windup', 'heavy_windup', 'attack', 'heavy_attack'].includes(player.state) && dist < this.preferredDistance + 60) {
-      if (Math.random() < this.defenseRate && this.state !== 'block') {
+      if (this.stamina >= 20 && Math.random() < this.defenseRate && this.state !== 'block') {
         this.startBlock();
         this.blockDuration = 0.35 + Math.random() * 0.3;
         this.vx = 0;
         return;
+      } else if (this.stamina < 20 && this.state !== 'block') {
+        // Back off rapidly when player attacks and stamina is too low to block
+        this.aiState = 'RETREAT';
+        this.retreatTimer = 0.5;
       }
+    }
+
+    // Low Stamina Recovery Check: AI must back off to let stamina recover
+    if (this.stamina < 30) {
+      this.aiState = 'RETREAT';
+      this.retreatTimer = Math.max(this.retreatTimer, 0.7);
     }
 
     // AI State Machine
@@ -102,11 +114,11 @@ export class EnemyAI extends Fighter {
         this.aiState = 'APPROACH';
       } else if (dist < this.preferredDistance - 25) {
         // Too close, chance to retreat or attack
-        this.aiState = Math.random() < 0.5 ? 'RETREAT' : 'ATTACK';
+        this.aiState = (this.stamina < 30 || Math.random() < 0.5) ? 'RETREAT' : 'ATTACK';
       } else {
         // In fighting sweet-spot range
         const roll = Math.random();
-        if (roll < this.aggression) {
+        if (roll < this.aggression && this.stamina >= 15) {
           this.aiState = 'ATTACK';
         } else if (roll < this.aggression + 0.3) {
           this.aiState = 'IDLE';
@@ -123,9 +135,14 @@ export class EnemyAI extends Fighter {
         this.vx = dir * this.speed;
         this.state = 'run';
 
-        // If closed in to attack distance, try attack
+        // If closed in to attack distance, try attack if stamina permits
         if (dist <= this.preferredDistance + 15 && this.aiAttackCooldown <= 0) {
-          this.aiState = 'ATTACK';
+          if (this.stamina >= 15) {
+            this.aiState = 'ATTACK';
+          } else {
+            this.aiState = 'RETREAT';
+            this.retreatTimer = 0.6;
+          }
         }
         break;
       }
@@ -139,15 +156,27 @@ export class EnemyAI extends Fighter {
 
       case 'ATTACK': {
         this.vx = 0;
-        if (this.aiAttackCooldown <= 0) {
-          const isHeavy = this.isBoss ? (Math.random() < 0.45) : (this.aggression > 0.6 && Math.random() < 0.25);
-          this.startAttack(isHeavy);
-          this.aiAttackCooldown = this.attackInterval + Math.random() * 0.5;
-          // Set next state after attack to retreat or idle
-          this.aiState = Math.random() < 0.5 ? 'RETREAT' : 'IDLE';
-          this.retreatTimer = 0.4 + Math.random() * 0.3;
+        if (this.aiAttackCooldown <= 0 && this.stamina >= 15) {
+          let isHeavy = this.isBoss ? (Math.random() < 0.45) : (this.aggression > 0.6 && Math.random() < 0.25);
+          if (isHeavy && this.stamina < 35) {
+            isHeavy = false; // Fall back to light attack if not enough stamina for heavy
+          }
+          const started = this.startAttack(isHeavy);
+          if (started) {
+            this.aiAttackCooldown = this.attackInterval + Math.random() * 0.5;
+            // Set next state after attack to retreat or idle
+            this.aiState = Math.random() < 0.6 ? 'RETREAT' : 'IDLE';
+            this.retreatTimer = 0.4 + Math.random() * 0.3;
+          } else {
+            this.aiState = 'RETREAT';
+            this.retreatTimer = 0.6;
+          }
         } else {
           this.state = 'idle';
+          if (this.stamina < 15) {
+            this.aiState = 'RETREAT';
+            this.retreatTimer = 0.6;
+          }
         }
         break;
       }

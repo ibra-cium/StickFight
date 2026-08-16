@@ -1,24 +1,25 @@
-// Unified Input Controller for Touch and Keyboard
+// Unified Input Controller for Keyboard, Mouse, and Touch
+
+const ACTIONS = ['left', 'right', 'jump', 'attack', 'heavy', 'block'];
 
 export class InputController {
-  constructor() {
-    this.keys = {
-      left: false,
-      right: false,
-      attack: false,
-      block: false,
-      heavy: false,
-      jump: false,
-    };
+  constructor(canvas = null, game = null) {
+    this.canvas = canvas || document.getElementById('game-canvas');
+    this.game = game;
 
-    this.prevKeys = { ...this.keys };
-    this.touchState = {
-      left: false,
-      right: false,
-      attack: false,
-      block: false,
-      jump: false,
-    };
+    this.keyboard = {};
+    this.mouse = {};
+    this.touch = {};
+    this.keys = {};
+    this.prevKeys = {};
+
+    for (const a of ACTIONS) {
+      this.keyboard[a] = false;
+      this.mouse[a] = false;
+      this.touch[a] = false;
+      this.keys[a] = false;
+      this.prevKeys[a] = false;
+    }
 
     this.touchPointers = new Map(); // pointerId -> action
 
@@ -27,23 +28,58 @@ export class InputController {
     this.initTouch();
   }
 
+  reset() {
+    for (const a of ACTIONS) {
+      this.keyboard[a] = false;
+      this.mouse[a] = false;
+      this.touch[a] = false;
+      this.keys[a] = false;
+      this.prevKeys[a] = false;
+    }
+    this.touchPointers.clear();
+    const btnIds = ['btn-left', 'btn-right', 'btn-jump', 'btn-attack', 'btn-heavy', 'btn-block'];
+    for (const id of btnIds) {
+      const btn = document.getElementById(id);
+      if (btn) btn.classList.remove('active');
+    }
+  }
+
   initMouse() {
     // Prevent right-click context menu during the game
     window.addEventListener('contextmenu', (e) => {
       e.preventDefault();
     });
 
-    window.addEventListener('mousedown', (e) => {
-      if (e.button === 2) {
-        // Right Mouse Button -> Attack
-        this.keys.attack = true;
+    const canvas = this.canvas || document.getElementById('game-canvas');
+    if (canvas) {
+      canvas.addEventListener('mousedown', (e) => {
+        if (this.game && this.game.state !== 'playing') return;
+        if (e.button === 0) {
+          this.mouse.attack = true;
+        } else if (e.button === 2) {
+          this.mouse.heavy = true;
+        }
+      });
+
+      canvas.addEventListener('mouseup', (e) => {
+        if (e.button === 0) {
+          this.mouse.attack = false;
+        } else if (e.button === 2) {
+          this.mouse.heavy = false;
+        }
+      });
+    }
+
+    // Clear all mouse flags if button is released outside canvas
+    window.addEventListener('mouseup', () => {
+      for (const a of ACTIONS) {
+        this.mouse[a] = false;
       }
     });
 
-    window.addEventListener('mouseup', (e) => {
-      if (e.button === 2) {
-        this.keys.attack = false;
-      }
+    // Window blur safety
+    window.addEventListener('blur', () => {
+      this.reset();
     });
   }
 
@@ -57,30 +93,30 @@ export class InputController {
       switch (e.code) {
         case 'ArrowLeft':
         case 'KeyA':
-          this.keys.left = true;
+          this.keyboard.left = true;
           break;
         case 'ArrowRight':
         case 'KeyD':
-          this.keys.right = true;
+          this.keyboard.right = true;
           break;
         case 'Space':
         case 'KeyW':
         case 'ArrowUp':
-          this.keys.jump = true;
+          this.keyboard.jump = true;
           break;
         case 'KeyJ':
         case 'KeyZ':
-          this.keys.attack = true;
+          this.keyboard.attack = true;
           break;
         case 'ShiftLeft':
         case 'ShiftRight':
         case 'KeyK':
         case 'KeyC':
-          this.keys.block = true;
+          this.keyboard.block = true;
           break;
         case 'KeyX':
         case 'KeyL':
-          this.keys.heavy = true;
+          this.keyboard.heavy = true;
           break;
       }
     });
@@ -89,30 +125,30 @@ export class InputController {
       switch (e.code) {
         case 'ArrowLeft':
         case 'KeyA':
-          this.keys.left = false;
+          this.keyboard.left = false;
           break;
         case 'ArrowRight':
         case 'KeyD':
-          this.keys.right = false;
+          this.keyboard.right = false;
           break;
         case 'Space':
         case 'KeyW':
         case 'ArrowUp':
-          this.keys.jump = false;
+          this.keyboard.jump = false;
           break;
         case 'KeyJ':
         case 'KeyZ':
-          this.keys.attack = false;
+          this.keyboard.attack = false;
           break;
         case 'ShiftLeft':
         case 'ShiftRight':
         case 'KeyK':
         case 'KeyC':
-          this.keys.block = false;
+          this.keyboard.block = false;
           break;
         case 'KeyX':
         case 'KeyL':
-          this.keys.heavy = false;
+          this.keyboard.heavy = false;
           break;
       }
     });
@@ -124,7 +160,7 @@ export class InputController {
       if (!btn) return;
 
       const setAction = (active) => {
-        this.touchState[action] = active;
+        this.touch[action] = active;
         if (active) {
           btn.classList.add('active');
         } else {
@@ -160,18 +196,17 @@ export class InputController {
 
     bindBtn('btn-left', 'left');
     bindBtn('btn-right', 'right');
+    bindBtn('btn-jump', 'jump');
     bindBtn('btn-attack', 'attack');
+    bindBtn('btn-heavy', 'heavy');
     bindBtn('btn-block', 'block');
   }
 
   update() {
     this.prevKeys = { ...this.keys };
-    // Combine keyboard + mouse + touch
-    this.keys.left = this.keys.left || this.touchState.left;
-    this.keys.right = this.keys.right || this.touchState.right;
-    this.keys.attack = this.keys.attack || this.touchState.attack;
-    this.keys.block = this.keys.block || this.touchState.block;
-    this.keys.jump = this.keys.jump || this.touchState.jump;
+    for (const a of ACTIONS) {
+      this.keys[a] = this.keyboard[a] || this.mouse[a] || this.touch[a];
+    }
   }
 
   isDown(action) {

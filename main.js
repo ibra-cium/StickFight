@@ -1,17 +1,17 @@
 // Main Game Loop and State Coordinator for Notebook Duel
 
-import { InputController } from './src/core/Input.js?v=5';
-import { Camera } from './src/core/Camera.js?v=5';
-import { sound } from './src/core/Audio.js?v=5';
-import { renderer } from './src/graphics/NotebookRenderer.js?v=5';
-import { particles } from './src/graphics/Particles.js?v=5';
-import { weather } from './src/graphics/Weather.js?v=5';
-import { scenery } from './src/systems/Scenery.js?v=5';
-import { Player } from './src/entities/Player.js?v=5';
-import { CombatSystem } from './src/systems/CombatSystem.js?v=5';
-import { LevelSystem } from './src/systems/LevelSystem.js?v=5';
-import { HUD } from './src/ui/HUD.js?v=5';
-import { MenuUI } from './src/ui/MenuUI.js?v=5';
+import { InputController } from './src/core/Input.js';
+import { Camera } from './src/core/Camera.js';
+import { sound } from './src/core/Audio.js';
+import { renderer } from './src/graphics/NotebookRenderer.js';
+import { particles } from './src/graphics/Particles.js';
+import { weather } from './src/graphics/Weather.js';
+import { scenery } from './src/systems/Scenery.js';
+import { Player } from './src/entities/Player.js';
+import { CombatSystem } from './src/systems/CombatSystem.js';
+import { LevelSystem } from './src/systems/LevelSystem.js';
+import { HUD } from './src/ui/HUD.js';
+import { MenuUI } from './src/ui/MenuUI.js';
 
 class NotebookDuelGame {
   constructor() {
@@ -23,7 +23,7 @@ class NotebookDuelGame {
     this.height = 540;
 
     // Subsystems
-    this.input = new InputController();
+    this.input = new InputController(this.canvas, this);
     this.camera = new Camera(this.width, this.height);
     this.combat = new CombatSystem(this.camera);
     this.levelSystem = new LevelSystem();
@@ -66,6 +66,7 @@ class NotebookDuelGame {
 
   setState(newState) {
     this.state = newState;
+    this.input.reset();
     if (this.touchOverlay) {
       if (this.state === 'playing') {
         this.touchOverlay.classList.remove('hidden');
@@ -76,6 +77,7 @@ class NotebookDuelGame {
   }
 
   startLevel(levelNum) {
+    this.input.reset();
     this.levelSystem.currentLevel = levelNum;
     const cfg = this.levelSystem.getCurrentConfig();
 
@@ -90,12 +92,11 @@ class NotebookDuelGame {
   }
 
   update(dt) {
-    renderer.update();
+    this.input.update();
+    renderer.update(dt);
 
     if (this.state === 'playing') {
-      this.input.update();
-
-      if (this.camera.hitstopFrames <= 0) {
+      if (this.camera.hitstopTimer <= 0) {
         // Player & Enemy updates
         this.player.handleInput(this.input, this.enemy);
         this.player.update(dt);
@@ -192,8 +193,14 @@ class NotebookDuelGame {
   }
 
   loop(timestamp) {
-    const dt = Math.min(0.1, (timestamp - this.lastTime) / 1000);
+    const rawDt = Math.min(0.1, (timestamp - this.lastTime) / 1000);
     this.lastTime = timestamp;
+
+    let dt = rawDt;
+    if (this.camera.slowMoTimer > 0) {
+      this.camera.slowMoTimer -= rawDt;
+      dt *= 0.25;
+    }
 
     this.update(dt);
     this.draw();

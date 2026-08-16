@@ -13,6 +13,15 @@ export class Fighter {
     // Stats
     this.maxHp = config.maxHp || 100;
     this.hp = this.maxHp;
+    this.maxStamina = config.maxStamina || 100;
+    this.stamina = this.maxStamina;
+    this.staminaRegen = config.staminaRegen || 28;
+    this.regenDelay = config.regenDelay || 0.6;
+    this.regenDelayTimer = 0;
+    this.exhausted = false;
+    this.staminaFlashTimer = 0;
+    this.guardBreakDuration = 1.2;
+
     this.attackPower = config.attackPower || 15;
     this.heavyAttackPower = config.heavyAttackPower || 30;
     this.speed = config.speed || 170;
@@ -31,8 +40,29 @@ export class Fighter {
     this.skeleton = new Skeleton(config);
     this.scale = this.skeleton.scale;
 
+    // Per-joint stiffness map for organic smoothing & sharp attack swings
+    this.jointStiffness = {
+      head: 9,
+      torso: 12,
+      leftHip: 16,
+      rightHip: 16,
+      hips: 16,
+      leftKnee: 18,
+      rightKnee: 18,
+      knees: 18,
+      leftShoulder: 20,
+      leftElbow: 22,
+      rightShoulder: 38,
+      rightElbow: 40,
+      swordAngle: 45,
+      ...config.jointStiffness,
+    };
+
+    // Squash & stretch on landing
+    this.squash = 1.0;
+
     // State machine
-    this.state = 'idle'; // idle, walk, run, windup, attack, heavy_windup, heavy_attack, block, hit, knockback, dead, victory
+    this.state = 'idle'; // idle, walk, run, windup, attack, heavy_windup, heavy_attack, block, hit, knockback, guard_broken, dead, victory
     this.stateTimer = 0;
     this.animCycle = 0;
 
@@ -47,13 +77,14 @@ export class Fighter {
     // Attack hitbox & blade trail tracking
     this.hasHitThisSwing = false;
     this.swordTrailPoints = [];
+    this.trailEmitTimer = 0; // Keep emitting trail for 0.12s after attack ends
 
     // Footstep audio throttle
     this.lastFootstepTime = 0;
   }
 
   jump(force = 440) {
-    if (!this.isGrounded || ['dead', 'hit', 'knockback', 'victory', 'block', 'windup', 'attack', 'heavy_windup', 'heavy_attack'].includes(this.state)) return;
+    if (!this.isGrounded || ['dead', 'hit', 'knockback', 'victory', 'guard_broken', 'block', 'windup', 'attack', 'heavy_windup', 'heavy_attack'].includes(this.state)) return;
     this.vy = -force;
     this.isGrounded = false;
     sound.playJump();
@@ -62,10 +93,15 @@ export class Fighter {
 
   reset(x, facing = 1) {
     this.hp = this.maxHp;
+    this.stamina = this.maxStamina;
+    this.regenDelayTimer = 0;
+    this.exhausted = false;
+    this.staminaFlashTimer = 0;
     this.x = x;
     this.y = this.groundY;
     this.vx = 0;
     this.vy = 0;
+    this.squash = 1.0;
     this.isGrounded = true;
     this.facing = facing;
     this.state = 'idle';
@@ -76,19 +112,32 @@ export class Fighter {
     this.hurtTimer = 0;
     this.invulnerableTimer = 0;
     this.hasHitThisSwing = false;
+    this.swordTrailPoints = [];
+    this.trailEmitTimer = 0;
   }
 
   startAttack(isHeavy = false) {
-    if (this.attackCooldown > 0 || ['hit', 'knockback', 'dead', 'victory'].includes(this.state)) return false;
+    if (this.attackCooldown > 0 || ['hit', 'knockback', 'dead', 'victory', 'guard_broken'].includes(this.state)) return false;
+
+    const cost = isHeavy ? 35 : 15;
+    if (this.stamina < cost) {
+      this.staminaFlashTimer = 0.35;
+      sound.playNo();
+      return false;
+    }
+
+    this.stamina -= cost;
+    this.regenDelayTimer = this.regenDelay;
     this.state = isHeavy ? 'heavy_windup' : 'windup';
     this.stateTimer = 0;
     this.hasHitThisSwing = false;
     this.swordTrailPoints = [];
+    this.trailEmitTimer = 0.12;
     return true;
   }
 
   startBlock() {
-    if (['hit', 'knockback', 'dead', 'victory', 'attack', 'heavy_attack'].includes(this.state)) return;
+    if (['hit', 'knockback', 'dead', 'victory', 'guard_broken', 'attack', 'heavy_attack'].includes(this.state)) return;
     if (this.state !== 'block') {
       this.state = 'block';
       this.stateTimer = 0;
@@ -107,15 +156,40 @@ export class Fighter {
   takeDamage(amount, knockbackForce = 150, attackerX = 0, isHeavy = false) {
     if (this.state === 'dead' || this.invulnerableTimer > 0) return { type: 'miss' };
 
+    // During guard break, take 2x damage!
+    if (this.state === 'guard_broken') {
+      amount *= 2;
+    }
+
     // Check Parry
     if (this.state === 'block' && this.parryWindow > 0) {
       sound.playParry();
       particles.addParryEffect(this.x + this.facing * 20, this.y - 20);
+      // Successful parry refunds 10 stamina to defender
+      this.stamina = Math.min(this.maxStamina, this.stamina + 10);
       return { type: 'parry', reflectedDamage: 10 };
     }
 
     // Check Regular Block
     if (this.state === 'block') {
+      // Blocking a hit costs 20 stamina
+      this.stamina = Math.max(0, this.stamina - 20);
+      this.regenDelayTimer = this.regenDelay;
+
+      // Check if stamina depleted -> Guard Break
+      if (this.stamina <= 0) {
+        this.stamina = 0;
+        this.state = 'guard_broken';
+        this.stateTimer = 0;
+        this.isBlocking = false;
+        this.parryWindow = 0;
+        this.vx = (this.x > attackerX ? 1 : -1) * (knockbackForce * 0.4);
+
+        sound.playGuardBreak();
+        particles.addGuardBreakEffect(this.x, this.y);
+        return { type: 'guard_break', damage: 0 };
+      }
+
       sound.playBlock();
       const blockedAmount = Math.max(1, Math.round(amount * 0.2)); // 80% damage reduction
       this.hp -= blockedAmount;
@@ -180,6 +254,20 @@ export class Fighter {
     if (this.parryWindow > 0) this.parryWindow -= dt;
     if (this.hurtTimer > 0) this.hurtTimer -= dt;
     if (this.invulnerableTimer > 0) this.invulnerableTimer -= dt;
+    if (this.staminaFlashTimer > 0) this.staminaFlashTimer -= dt;
+
+    // Stamina regeneration
+    if (this.regenDelayTimer > 0) {
+      this.regenDelayTimer -= dt;
+    } else if (!['dead', 'guard_broken'].includes(this.state)) {
+      this.stamina = Math.min(this.maxStamina, this.stamina + this.staminaRegen * dt);
+    }
+    this.exhausted = this.stamina < 15;
+
+    // Decrement sword trail emission extension timer if not actively in swing state
+    if (!['attack', 'heavy_attack'].includes(this.state) && this.trailEmitTimer > 0) {
+      this.trailEmitTimer -= dt;
+    }
 
     // Apply Physics
     this.x += this.vx * dt;
@@ -189,13 +277,14 @@ export class Fighter {
       this.vy += this.gravity * dt;
     }
 
-    // Ground collision
+    // Ground collision & Landing Squash
     const wasGrounded = this.isGrounded;
     if (this.y >= this.groundY) {
       this.y = this.groundY;
       this.vy = 0;
       this.isGrounded = true;
       if (!wasGrounded) {
+        this.squash = 0.75;
         particles.addDust(this.x, this.groundY, this.facing);
         sound.playFootstep();
       }
@@ -203,34 +292,53 @@ export class Fighter {
       this.isGrounded = false;
     }
 
-    // Friction
+    // Ease squash back to 1.0 over ~0.15s (framerate independent)
+    this.squash += (1 - this.squash) * (1 - Math.exp(-20 * dt));
+
+    // Friction (Framerate Independent)
     if (this.isGrounded) {
-      this.vx *= 0.82;
-      if (Math.abs(this.vx) < 5) this.vx = 0;
+      this.vx *= Math.pow(0.82, dt * 60);
+      if (Math.abs(this.vx) < 2) this.vx = 0;
     }
 
     // Arena boundary clamp
     if (this.x < -650) this.x = -650;
     if (this.x > 650) this.x = 650;
 
-    // Process State Transitions
+    // Process State Transitions (writes ONLY to targetAngles)
     this.processState(dt);
 
-    // Compute joints and record sword blade tip for trails
-    const seed = Math.floor(this.animCycle * 15);
-    this.skeleton.computeJoints(this.x, this.y, this.facing, seed);
+    // Joint Smoothing: Interpolate angles towards targetAngles using per-joint stiffness
+    const angles = this.skeleton.angles;
+    const targetAngles = this.skeleton.targetAngles;
+    for (const k in angles) {
+      const stiff = this.jointStiffness[k] || 16;
+      angles[k] += (targetAngles[k] - angles[k]) * (1 - Math.exp(-stiff * dt));
+    }
 
-    if (['attack', 'heavy_attack'].includes(this.state)) {
+    // Compute forward kinematics joint positions with squash scaling
+    const seed = Math.floor(this.animCycle * 15);
+    this.skeleton.computeJoints(this.x, this.y, this.facing, seed, this.squash);
+
+    // Sword blade trail tracking (during attack + 0.12s follow-through)
+    const isAttacking = ['attack', 'heavy_attack'].includes(this.state);
+    if (isAttacking) {
+      this.trailEmitTimer = 0.12;
+    }
+
+    if (isAttacking || this.trailEmitTimer > 0) {
       this.swordTrailPoints.push({ x: this.skeleton.joints.swordTip.x, y: this.skeleton.joints.swordTip.y });
-      if (this.swordTrailPoints.length > 8) this.swordTrailPoints.shift();
+      if (this.swordTrailPoints.length > 14) this.swordTrailPoints.shift();
       if (this.swordTrailPoints.length >= 2) {
         particles.addSlashTrail(this.swordTrailPoints, this.isBoss ? '#000' : '#222', (this.state === 'heavy_attack' ? 5 : 3) * this.scale);
       }
+    } else {
+      this.swordTrailPoints = [];
     }
   }
 
   processState(dt) {
-    const a = this.skeleton.angles;
+    const a = this.skeleton.targetAngles;
 
     // Aerial pose when airborne and not attacking/hurt
     if (!this.isGrounded && ['idle', 'walk', 'run'].includes(this.state)) {
@@ -297,33 +405,41 @@ export class Fighter {
       }
 
       case 'windup': {
-        // Pull sword back
+        // Pull sword back & anticipation lean
         const progress = Math.min(1, this.stateTimer / 0.14);
-        a.torso = -0.25 * progress;
-        a.head = 0.1 * progress;
+        a.torso = -0.15 * progress;
+        a.head = 0.08 * progress;
         a.rightShoulder = -1.4 * progress;
         a.rightElbow = -1.6 * progress;
         a.leftShoulder = 0.6;
         a.leftElbow = 0.9;
         a.rightHip = -0.3 * progress;
+        a.rightKnee = 0.35 * progress + 0.2;
         a.leftHip = 0.3 * progress;
+        a.leftKnee = 0.2;
         a.swordAngle = -0.9 * progress;
 
         if (this.stateTimer >= 0.14) {
           this.state = 'attack';
           this.stateTimer = 0;
-          this.vx = this.facing * 160; // Attack lunge forward
           sound.playSwing(false);
         }
         break;
       }
 
       case 'attack': {
+        // Forward root motion burst on first 0.10s
+        if (this.stateTimer <= 0.10) {
+          this.vx = this.facing * 120;
+        } else {
+          this.vx = 0;
+        }
+
         // Explosive forward slash
         const progress = Math.min(1, this.stateTimer / 0.18);
         const ease = Math.sin((progress * Math.PI) / 2);
 
-        a.torso = -0.25 + 0.55 * ease;
+        a.torso = -0.15 + 0.55 * ease;
         a.head = -0.15 * ease;
         a.rightShoulder = -1.4 + 2.6 * ease;
         a.rightElbow = -1.6 + 1.2 * ease;
@@ -331,55 +447,69 @@ export class Fighter {
         a.leftShoulder = -0.2;
         a.leftElbow = 0.4;
         a.rightHip = 0.4 * ease;
+        a.rightKnee = 0.2;
         a.leftHip = -0.3 * ease;
+        a.leftKnee = 0.2;
 
         if (this.stateTimer >= 0.18) {
           this.state = 'idle';
           this.stateTimer = 0;
           this.attackCooldown = 0.22;
-          this.swordTrailPoints = [];
         }
         break;
       }
 
       case 'heavy_windup': {
-        // Deep overhead windup
+        // Deep overhead windup & heavy anticipation lean
         const progress = Math.min(1, this.stateTimer / 0.32);
-        a.torso = -0.4 * progress;
-        a.head = 0.2 * progress;
+        a.torso = -0.25 * progress;
+        a.head = 0.15 * progress;
         a.rightShoulder = -2.2 * progress; // High overhead
         a.rightElbow = -1.8 * progress;
         a.leftShoulder = -1.5 * progress;
         a.leftElbow = -1.2 * progress;
         a.swordAngle = -1.2 * progress;
+        a.rightHip = -0.35 * progress;
+        a.rightKnee = 0.45 * progress + 0.2;
+        a.leftHip = 0.35 * progress;
+        a.leftKnee = 0.2;
 
         if (this.stateTimer >= 0.32) {
           this.state = 'heavy_attack';
           this.stateTimer = 0;
-          this.vx = this.facing * 260; // Colossal lunge
           sound.playSwing(true);
         }
         break;
       }
 
       case 'heavy_attack': {
+        // Forward heavy root motion burst on first 0.10s
+        if (this.stateTimer <= 0.10) {
+          this.vx = this.facing * 190;
+        } else {
+          this.vx = 0;
+        }
+
         // Massive overhead cleave
         const progress = Math.min(1, this.stateTimer / 0.24);
         const ease = Math.sin((progress * Math.PI) / 2);
 
-        a.torso = -0.4 + 0.9 * ease;
+        a.torso = -0.25 + 0.85 * ease;
         a.head = -0.3 * ease;
         a.rightShoulder = -2.2 + 3.8 * ease;
         a.rightElbow = -1.8 + 1.6 * ease;
         a.leftShoulder = -1.5 + 2.8 * ease;
         a.leftElbow = -1.2 + 1.6 * ease;
         a.swordAngle = -1.2 + 3.0 * ease;
+        a.rightHip = 0.5 * ease;
+        a.rightKnee = 0.2;
+        a.leftHip = -0.4 * ease;
+        a.leftKnee = 0.2;
 
         if (this.stateTimer >= 0.24) {
           this.state = 'idle';
           this.stateTimer = 0;
           this.attackCooldown = 0.45;
-          this.swordTrailPoints = [];
         }
         break;
       }
@@ -429,6 +559,30 @@ export class Fighter {
         if (this.isGrounded && this.stateTimer > 0.4) {
           this.state = 'idle';
           this.stateTimer = 0;
+        }
+        break;
+      }
+
+      case 'guard_broken': {
+        // Dazed, staggered stance: drooping head, wobbly knees, slumped torso, sword drooping down
+        const wobble = Math.sin(this.stateTimer * 12);
+        a.torso = -0.25 + wobble * 0.08;
+        a.head = 0.4 + wobble * 0.08;
+        a.rightShoulder = 0.2;
+        a.rightElbow = 0.5;
+        a.leftShoulder = 0.3;
+        a.leftElbow = 0.6;
+        a.swordAngle = 1.6; // Sword dropped low to ground
+        a.rightHip = -0.2;
+        a.rightKnee = 0.45;
+        a.leftHip = 0.2;
+        a.leftKnee = 0.45;
+
+        if (this.stateTimer >= this.guardBreakDuration) {
+          this.state = 'idle';
+          this.stateTimer = 0;
+          this.stamina = 30; // Reset stamina to 30 after 1.2s stagger
+          this.regenDelayTimer = 0;
         }
         break;
       }
@@ -484,6 +638,6 @@ export class Fighter {
   draw(ctx) {
     const isHurt = this.hurtTimer > 0;
     const seed = Math.floor(this.animCycle * 14);
-    this.skeleton.draw(ctx, this.x, this.y, this.facing, seed, isHurt);
+    this.skeleton.draw(ctx, this.x, this.y, this.facing, seed, isHurt, this.squash);
   }
 }
