@@ -207,9 +207,10 @@ export class TouchGestures {
       }
 
       // Pull BACKWARD to Block:
-      // Player facing: 1 = facing right (away is dx < -18), -1 = facing left (away is dx > 18)
+      // Requires a strong pull-back (>40px) to disambiguate from backward movement
+      // Player facing: 1 = facing right (away is dx < -40), -1 = facing left (away is dx > 40)
       const playerFacing = (this.game.player && this.game.player.facing) || 1;
-      const isPullingBack = (playerFacing === 1 && dx < -18) || (playerFacing === -1 && dx > 18);
+      const isPullingBack = (playerFacing === 1 && dx < -40) || (playerFacing === -1 && dx > 40);
       if (this.input) {
         this.input.touch.block = isPullingBack;
       }

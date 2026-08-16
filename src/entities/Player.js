@@ -43,7 +43,7 @@ export class Player extends Fighter {
       this.jump();
     }
 
-    // 3. Heavy Attack Input
+    // 3. Heavy Attack Input (BEFORE block so right-zone attacks aren't swallowed)
     if (input.isJustPressed('heavy') || (input.isJustPressed('attack') && !this.isGrounded)) {
       const isAerial = !this.isGrounded;
       const variant = isAerial ? 'overhead' : (input.heavyVariant || 'overhead');
@@ -58,7 +58,7 @@ export class Player extends Fighter {
       }
     }
 
-    // 4. Normal Light Attack Input
+    // 4. Normal Light Attack Input (BEFORE block so right-zone taps aren't swallowed)
     if (input.isJustPressed('attack')) {
       const started = this.startAttack(false);
       if (started) {
@@ -67,14 +67,15 @@ export class Player extends Fighter {
       }
     }
 
-    // 5. Block Input
-    if (input.isDown('block')) {
+    // 5. Block Input — skip if an attack is buffered (prevents block from eating attack inputs)
+    const hasBufferedAttack = input.bufferTimers['attack'] > 0 || input.bufferTimers['heavy'] > 0;
+    if (input.isDown('block') && !hasBufferedAttack) {
       if (this.isGrounded) {
         this.startBlock();
         this.vx = 0;
         return;
       }
-    } else if (this.state === 'block') {
+    } else if (this.state === 'block' && !input.isDown('block')) {
       this.stopBlock();
     }
 
