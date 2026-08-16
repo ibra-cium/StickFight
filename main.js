@@ -92,16 +92,25 @@ class NotebookDuelGame {
       this.canvas.width = rect.width * dpr;
       this.canvas.height = rect.height * dpr;
 
-      this.viewScale = Math.min(rect.width / DESIGN_W, rect.height / DESIGN_H);
-      this.offsetX = (rect.width - DESIGN_W * this.viewScale) / 2;
-      this.offsetY = (rect.height - DESIGN_H * this.viewScale) / 2;
+      const screenAspect = rect.width / rect.height;
+      if (screenAspect >= 1.5) {
+        const maxW = DESIGN_H * 3.6;
+        this.viewScale = rect.height / DESIGN_H;
+        this.width = Math.min(rect.width / this.viewScale, maxW);
+        this.height = DESIGN_H;
+        this.offsetX = (rect.width - this.width * this.viewScale) / 2;
+        this.offsetY = 0;
+      } else {
+        this.viewScale = Math.min(rect.width / DESIGN_W, rect.height / DESIGN_H);
+        this.width = DESIGN_W;
+        this.height = DESIGN_H;
+        this.offsetX = (rect.width - DESIGN_W * this.viewScale) / 2;
+        this.offsetY = (rect.height - DESIGN_H * this.viewScale) / 2;
+      }
 
-      this.width = DESIGN_W;
-      this.height = DESIGN_H;
-
-      this.camera.resize(DESIGN_W, DESIGN_H);
-      renderer.onResize(DESIGN_W, DESIGN_H);
-      scenery.onResize();
+      this.camera.resize(this.width, this.height);
+      renderer.onResize(this.width, this.height);
+      scenery.onResize(this.width, this.height);
     };
 
     window.addEventListener('resize', resize);
@@ -221,7 +230,7 @@ class NotebookDuelGame {
 
     // Clip to design area to keep letterbox clean
     ctx.beginPath();
-    ctx.rect(0, 0, DESIGN_W, DESIGN_H);
+    ctx.rect(0, 0, this.width, this.height);
     ctx.clip();
 
     // 1. Draw Notebook Paper Background (with Blue Ruled Lines & Red Margin)

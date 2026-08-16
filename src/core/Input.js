@@ -34,13 +34,19 @@ export class InputController {
     }
 
     this.touchPointers = new Map(); // pointerId -> action
+    this.eventQueue = []; // [{ action, time }]
 
     this.initKeyboard();
     this.initMouse();
     this.initTouch();
   }
 
+  queueAction(action) {
+    this.eventQueue.push({ action, time: performance.now() });
+  }
+
   reset() {
+    this.eventQueue = [];
     for (const a of ACTIONS) {
       this.keyboard[a] = false;
       this.mouse[a] = false;
@@ -238,8 +244,17 @@ export class InputController {
   update(dt = 1 / 60) {
     this.prevKeys = { ...this.keys };
 
+    // Drain eventQueue: any action queued since last update becomes a one-frame pulse ORed into keys
+    const queuedPulses = {};
+    while (this.eventQueue.length > 0) {
+      const item = this.eventQueue.shift();
+      if (item && item.action) {
+        queuedPulses[item.action] = true;
+      }
+    }
+
     for (const a of ACTIONS) {
-      const isNowDown = !!(this.keyboard[a] || this.mouse[a] || this.touch[a]);
+      const isNowDown = !!(this.keyboard[a] || this.mouse[a] || this.touch[a] || queuedPulses[a]);
       const wasDown = !!this.prevKeys[a];
 
       this.keys[a] = isNowDown;
@@ -253,8 +268,8 @@ export class InputController {
         }
       }
 
-      // Just pressed -> start buffer window
-      if (isNowDown && !wasDown) {
+      // If queued in eventQueue or newly pressed -> start/refresh 150ms buffer window
+      if (queuedPulses[a] || (isNowDown && !wasDown)) {
         this.bufferTimers[a] = 0.15; // 150ms buffer
         this.consumed[a] = false;
       }
@@ -281,6 +296,9 @@ export class InputController {
   consume(action) {
     this.consumed[action] = true;
     this.bufferTimers[action] = 0;
+    if (action === 'heavy') {
+      this.heavyVariant = 'overhead';
+    }
   }
 
   isDown(action) {
@@ -289,7 +307,7 @@ export class InputController {
 
   isJustPressed(action) {
     // For buffered actions (attack, heavy, dash, jump)
-    if (['attack', 'heavy', 'dash'].includes(action)) {
+    if (['attack', 'heavy', 'dash', 'jump'].includes(action)) {
       return this.bufferTimers[action] > 0 && !this.consumed[action];
     }
     // Default raw just-pressed check

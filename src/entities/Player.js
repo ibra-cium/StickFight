@@ -39,6 +39,7 @@ export class Player extends Fighter {
 
     // 2. Jump Input (Space / W / ArrowUp / Flick Up)
     if (input.isJustPressed('jump') && this.isGrounded && !['block', 'windup', 'attack', 'heavy_windup', 'heavy_attack', 'guard_broken', 'dash'].includes(this.state)) {
+      input.consume('jump');
       this.jump();
     }
 

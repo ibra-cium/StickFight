@@ -25,7 +25,7 @@ export class ScenerySystem {
     ];
 
     this.grassTufts = [];
-    for (let x = -800; x <= 800; x += 35 + Math.random() * 30) {
+    for (let x = -2000; x <= 2000; x += 35 + Math.random() * 30) {
       this.grassTufts.push({
         x,
         blades: 3 + Math.floor(Math.random() * 3),
@@ -37,17 +37,23 @@ export class ScenerySystem {
     // Static Scenery Offscreen Layer
     this.staticCanvas = document.createElement('canvas');
     this.staticCtx = this.staticCanvas.getContext('2d');
-    this.sceneryMinX = -900;
+    this.sceneryMinX = -1800;
     this.sceneryMinY = -300;
-    this.sceneryWidth = 1800;
+    this.sceneryWidth = 3600;
     this.sceneryHeight = 480;
     this.needsStaticRebuild = true;
 
     this.rebuildStaticScenery();
   }
 
-  onResize() {
-    this.rebuildStaticScenery();
+  onResize(width = 960, height = 540) {
+    const halfSpan = Math.max(1800, width * 1.5);
+    if (this.sceneryWidth !== halfSpan * 2) {
+      this.sceneryMinX = -halfSpan;
+      this.sceneryWidth = halfSpan * 2;
+      this.needsStaticRebuild = true;
+      this.rebuildStaticScenery();
+    }
   }
 
   rebuildStaticScenery() {
@@ -59,16 +65,21 @@ export class ScenerySystem {
     ctx.save();
     ctx.translate(-this.sceneryMinX, -this.sceneryMinY);
 
+    const minX = this.sceneryMinX;
+    const maxX = -this.sceneryMinX;
+
     // 1. Draw Distant Doodle Mountains
     renderer.sketchPoly(ctx, [
-      { x: -800, y: this.groundY },
+      { x: minX, y: this.groundY },
+      { x: minX + 300, y: this.groundY - 120 },
       { x: -500, y: this.groundY - 120 },
       { x: -280, y: this.groundY - 60 },
       { x: -80, y: this.groundY - 140 },
       { x: 160, y: this.groundY - 70 },
       { x: 420, y: this.groundY - 150 },
       { x: 680, y: this.groundY - 90 },
-      { x: 800, y: this.groundY },
+      { x: maxX - 300, y: this.groundY - 130 },
+      { x: maxX, y: this.groundY },
     ], {
       color: 'rgba(100, 110, 130, 0.4)',
       width: 1.4,
@@ -82,7 +93,7 @@ export class ScenerySystem {
     for (const t of this.trees) this.drawTree(ctx, t);
 
     // 3. Draw Main Ground Line
-    renderer.sketchLine(ctx, -850, this.groundY, 850, this.groundY, {
+    renderer.sketchLine(ctx, minX, this.groundY, maxX, this.groundY, {
       color: '#151515',
       width: 3.2,
       roughness: 1.4,
@@ -91,7 +102,7 @@ export class ScenerySystem {
     });
 
     // Secondary ground scratch underneath
-    renderer.sketchLine(ctx, -850, this.groundY + 4, 850, this.groundY + 4, {
+    renderer.sketchLine(ctx, minX, this.groundY + 4, maxX, this.groundY + 4, {
       color: '#333333',
       width: 1.6,
       roughness: 1.0,
@@ -101,6 +112,7 @@ export class ScenerySystem {
 
     // 4. Draw Grass Tufts
     for (const g of this.grassTufts) {
+      if (g.x < minX || g.x > maxX) continue;
       for (let b = 0; b < g.blades; b++) {
         const bx = g.x + (b - 1) * 4;
         const lean = (b - 1) * 5 + (Math.sin(g.seed + b) * 3);
@@ -118,11 +130,12 @@ export class ScenerySystem {
   }
 
   update(dt = 1 / 60) {
+    const bound = Math.abs(this.sceneryMinX);
     // Move clouds slowly
     for (const c of this.clouds) {
       c.x += c.speed * dt;
-      if (c.x > 800) {
-        c.x = -800;
+      if (c.x > bound) {
+        c.x = -bound;
         c.y = -220 - Math.random() * 80;
       }
     }

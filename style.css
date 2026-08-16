@@ -38,13 +38,21 @@ html, body {
   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 
-/* Fullscreen on phones/tablets */
-@media (max-aspect-ratio: 16/9) {
+/* Fullscreen on phones/tablets and touch devices */
+@media (max-aspect-ratio: 16/9), (hover: none) and (pointer: coarse), (max-height: 600px) {
   #game-container {
     max-width: 100vw;
     max-height: 100dvh;
     border-radius: 0;
   }
+}
+
+:fullscreen #game-container,
+#game-container:fullscreen {
+  max-width: 100vw;
+  max-height: 100dvh;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 #game-canvas {

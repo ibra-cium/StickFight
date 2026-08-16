@@ -13,6 +13,8 @@ export class TouchGestures {
     // Pointers tracking
     this.movePointerId = null;
     this.combatPointerId = null;
+    this.moveLastEventTime = 0;
+    this.combatLastEventTime = 0;
 
     // Movement (Left Zone) State
     this.moveOrigin = { x: 0, y: 0 };
@@ -31,12 +33,6 @@ export class TouchGestures {
     this.lastRightTapTime = 0;
     this.lastRightTapPos = { x: 0, y: 0 };
     this.trailPoints = []; // [{ x, y, alpha, time }]
-
-    // Single-frame pulses
-    this.jumpPulse = false;
-    this.attackPulse = false;
-    this.heavyPulse = false;
-    this.dashPulse = false;
 
     // Onboarding Tutorial State
     this.tutorialSeen = localStorage.getItem('notebook_duel_gesture_tutorial_seen') === 'true';
@@ -61,11 +57,6 @@ export class TouchGestures {
     this.joystickActive = false;
     this.joystickOpacity = 0;
     this.trailPoints = [];
-
-    this.jumpPulse = false;
-    this.attackPulse = false;
-    this.heavyPulse = false;
-    this.dashPulse = false;
 
     if (this.input) {
       this.input.touch.left = false;
@@ -96,8 +87,23 @@ export class TouchGestures {
 
     this.canvas.addEventListener('pointerdown', (e) => this.onPointerDown(e), { passive: false });
     this.canvas.addEventListener('pointermove', (e) => this.onPointerMove(e), { passive: false });
-    this.canvas.addEventListener('pointerup', (e) => this.onPointerUp(e), { passive: false });
-    this.canvas.addEventListener('pointercancel', (e) => this.onPointerCancel(e), { passive: false });
+    window.addEventListener('pointerup', (e) => this.onPointerUp(e), { passive: false });
+    window.addEventListener('pointercancel', (e) => this.onPointerCancel(e), { passive: false });
+    window.addEventListener('lostpointercapture', (e) => this.onPointerUp(e), true);
+    this.canvas.addEventListener('lostpointercapture', (e) => this.onPointerUp(e));
+
+    const handleReset = () => {
+      this.reset();
+      if (this.input) this.input.reset();
+    };
+
+    window.addEventListener('blur', handleReset);
+    window.addEventListener('pagehide', handleReset);
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        handleReset();
+      }
+    });
   }
 
   onPointerDown(e) {
@@ -108,14 +114,16 @@ export class TouchGestures {
     const gameW = this.game.width || 960;
     const gameH = this.game.height || 540;
     const midX = gameW / 2;
+    const now = performance.now();
 
     // LEFT ZONE: Movement
     if (pos.x < midX && this.movePointerId === null) {
       this.movePointerId = e.pointerId;
+      this.moveLastEventTime = now;
       this.canvas.setPointerCapture(e.pointerId);
       this.moveOrigin = { x: pos.x, y: pos.y };
       this.moveCurrent = { x: pos.x, y: pos.y };
-      this.moveStartTime = performance.now();
+      this.moveStartTime = now;
       this.moveFlickJumped = false;
       this.moveFlickCrouched = false;
       this.joystickActive = true;
@@ -125,10 +133,10 @@ export class TouchGestures {
     // RIGHT ZONE: Combat (Keep clear of bottom 8% of screen to prevent Android back gestures)
     if (pos.x >= midX && pos.y <= gameH * 0.92 && this.combatPointerId === null) {
       this.combatPointerId = e.pointerId;
+      this.combatLastEventTime = now;
       this.canvas.setPointerCapture(e.pointerId);
       this.combatOrigin = { x: pos.x, y: pos.y };
       this.combatCurrent = { x: pos.x, y: pos.y };
-      const now = performance.now();
       this.combatStartTime = now;
       this.combatSwipeTriggered = false;
 
@@ -138,13 +146,11 @@ export class TouchGestures {
       // Double-tap check for DASH (two taps within 260ms within 60px)
       const tapDist = Math.hypot(pos.x - this.lastRightTapPos.x, pos.y - this.lastRightTapPos.y);
       if (now - this.lastRightTapTime <= 260 && tapDist < 60) {
-        this.dashPulse = true;
-        this.input.touch.dash = true;
+        if (this.input) this.input.queueAction('dash');
         this.lastRightTapTime = 0; // reset
       } else {
-        // Zero latency LIGHT ATTACK pulse on initial tap
-        this.attackPulse = true;
-        this.input.touch.attack = true;
+        // Zero latency LIGHT ATTACK queue on initial tap
+        if (this.input) this.input.queueAction('attack');
         this.lastRightTapTime = now;
         this.lastRightTapPos = { x: pos.x, y: pos.y };
       }
@@ -160,6 +166,7 @@ export class TouchGestures {
     // Movement Pointer Move
     if (e.pointerId === this.movePointerId) {
       e.preventDefault();
+      this.moveLastEventTime = now;
       this.moveCurrent = { x: pos.x, y: pos.y };
 
       const dx = this.moveCurrent.x - this.moveOrigin.x;
@@ -168,43 +175,50 @@ export class TouchGestures {
 
       // Flick UP -> Jump (dy < -45px within 220ms)
       if (!this.moveFlickJumped && elapsed <= 220 && dy < -45) {
-        this.jumpPulse = true;
-        this.input.touch.jump = true;
+        if (this.input) this.input.queueAction('jump');
         this.moveFlickJumped = true;
       }
 
       // Flick DOWN -> Crouch (dy > 45px within 220ms)
+      // Cleared after 220ms flick window expires rather than based on dy
       if (!this.moveFlickCrouched && elapsed <= 220 && dy > 45) {
-        this.input.touch.crouch = true;
+        if (this.input) this.input.touch.crouch = true;
         this.moveFlickCrouched = true;
-      } else if (dy < 20) {
+      } else if (elapsed > 220 && this.input && this.input.touch.crouch) {
         this.input.touch.crouch = false;
       }
 
       // Joystick Analog X (Dead zone 14px, Max radius 70px)
       const absDx = Math.abs(dx);
       if (absDx < 14) {
-        this.input.touchAxisX = 0;
-        this.input.touch.left = false;
-        this.input.touch.right = false;
+        if (this.input) {
+          this.input.touchAxisX = 0;
+          this.input.touch.left = false;
+          this.input.touch.right = false;
+        }
       } else {
         const sign = Math.sign(dx);
         const norm = Math.min(1.0, (absDx - 14) / (70 - 14));
-        this.input.touchAxisX = sign * norm;
-        this.input.touch.left = (sign < 0);
-        this.input.touch.right = (sign > 0);
+        if (this.input) {
+          this.input.touchAxisX = sign * norm;
+          this.input.touch.left = (sign < 0);
+          this.input.touch.right = (sign > 0);
+        }
       }
 
       // Pull BACKWARD to Block:
       // Player facing: 1 = facing right (away is dx < -28), -1 = facing left (away is dx > 28)
       const playerFacing = (this.game.player && this.game.player.facing) || 1;
       const isPullingBack = (playerFacing === 1 && dx < -28) || (playerFacing === -1 && dx > 28);
-      this.input.touch.block = isPullingBack;
+      if (this.input) {
+        this.input.touch.block = isPullingBack;
+      }
     }
 
     // Combat Pointer Move
     if (e.pointerId === this.combatPointerId) {
       e.preventDefault();
+      this.combatLastEventTime = now;
       this.combatCurrent = { x: pos.x, y: pos.y };
 
       // Trail recording
@@ -219,41 +233,41 @@ export class TouchGestures {
       if (!this.combatSwipeTriggered && dist > 26 && elapsed <= 250) {
         this.combatSwipeTriggered = true;
 
-        // Cancel light attack and trigger heavy attack
-        this.input.touch.attack = false;
-        this.heavyPulse = true;
-        this.input.touch.heavy = true;
-
-        // Dismiss tutorial if first heavy attack performed
-        this.dismissTutorial();
-
         // Determine heavy variant direction:
         // down -> 'overhead', up -> 'uppercut', forward -> 'thrust'
         const playerFacing = (this.game.player && this.game.player.facing) || 1;
         const absX = Math.abs(dx);
         const absY = Math.abs(dy);
 
-        if (absY > absX) {
-          if (dy > 0) {
-            this.input.heavyVariant = 'overhead'; // swipe down
+        if (this.input) {
+          if (absY > absX) {
+            if (dy > 0) {
+              this.input.heavyVariant = 'overhead'; // swipe down
+            } else {
+              this.input.heavyVariant = 'uppercut'; // swipe up
+            }
           } else {
-            this.input.heavyVariant = 'uppercut'; // swipe up
+            // Horizontal swipe
+            const swipeDir = Math.sign(dx);
+            if (swipeDir === playerFacing) {
+              this.input.heavyVariant = 'thrust'; // swipe forward towards opponent
+            } else {
+              this.input.heavyVariant = 'overhead';
+            }
           }
-        } else {
-          // Horizontal swipe
-          const swipeDir = Math.sign(dx);
-          if (swipeDir === playerFacing) {
-            this.input.heavyVariant = 'thrust'; // swipe forward towards opponent
-          } else {
-            this.input.heavyVariant = 'overhead';
-          }
+
+          // Trigger heavy attack via queue
+          this.input.queueAction('heavy');
         }
+
+        // Dismiss tutorial if first heavy attack performed
+        this.dismissTutorial();
       }
     }
   }
 
   onPointerUp(e) {
-    if (e.pointerId === this.movePointerId) {
+    if (e && e.pointerId === this.movePointerId) {
       this.movePointerId = null;
       this.joystickActive = false;
       if (this.input) {
@@ -265,13 +279,8 @@ export class TouchGestures {
       }
     }
 
-    if (e.pointerId === this.combatPointerId) {
+    if (e && e.pointerId === this.combatPointerId) {
       this.combatPointerId = null;
-      if (this.input) {
-        this.input.touch.attack = false;
-        this.input.touch.heavy = false;
-        this.input.touch.dash = false;
-      }
     }
   }
 
@@ -290,22 +299,26 @@ export class TouchGestures {
   update(dt = 1 / 60) {
     if (!this.enabled) return;
 
-    // Reset single-frame pulses
-    if (this.jumpPulse) {
-      this.jumpPulse = false;
-      if (this.input) this.input.touch.jump = false;
+    const now = performance.now();
+
+    // Reset if game state changed away from playing
+    if (this.game && this.game.state !== 'playing' && (this.movePointerId !== null || this.combatPointerId !== null)) {
+      this.reset();
     }
-    if (this.attackPulse) {
-      this.attackPulse = false;
-      if (this.input) this.input.touch.attack = false;
+
+    // Watchdog: force-release stuck pointers after 2.5s of no events
+    if (this.movePointerId !== null && now - this.moveLastEventTime > 2500) {
+      this.onPointerUp({ pointerId: this.movePointerId });
     }
-    if (this.heavyPulse) {
-      this.heavyPulse = false;
-      if (this.input) this.input.touch.heavy = false;
+    if (this.combatPointerId !== null && now - this.combatLastEventTime > 2500) {
+      this.onPointerUp({ pointerId: this.combatPointerId });
     }
-    if (this.dashPulse) {
-      this.dashPulse = false;
-      if (this.input) this.input.touch.dash = false;
+
+    // Clear flick crouch when flick window has expired
+    if (this.movePointerId !== null && this.input && this.input.touch.crouch) {
+      if (now - this.moveStartTime > 220) {
+        this.input.touch.crouch = false;
+      }
     }
 
     // Joystick Fade In (100ms) / Fade Out (150ms)
@@ -316,7 +329,6 @@ export class TouchGestures {
     }
 
     // Update trail points decay
-    const now = performance.now();
     for (let i = this.trailPoints.length - 1; i >= 0; i--) {
       const pt = this.trailPoints[i];
       const age = (now - pt.time) / 1000;
