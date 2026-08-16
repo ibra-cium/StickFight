@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Notebook Duel - Hand-Drawn Sword Fighter</title>
+  <meta name="description" content="A 2D mobile sword-fighting game prototype with a procedural hand-drawn notebook aesthetic.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Architects+Daughter&family=Permanent+Marker&family=Caveat:wght@600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="game-container">
+    <canvas id="game-canvas"></canvas>
+
+    <!-- Mobile Touch Controls Overlay -->
+    <div id="touch-controls" class="touch-controls">
+      <div class="touch-group touch-left-group">
+        <button id="btn-left" class="touch-btn sketch-btn" aria-label="Move Left">
+          <span class="btn-icon">◀</span>
+          <span class="btn-label">LEFT</span>
+        </button>
+        <button id="btn-right" class="touch-btn sketch-btn" aria-label="Move Right">
+          <span class="btn-icon">▶</span>
+          <span class="btn-label">RIGHT</span>
+        </button>
+      </div>
+      <div class="touch-group touch-right-group">
+        <button id="btn-block" class="touch-btn sketch-btn block-btn" aria-label="Block">
+          <span class="btn-icon">🛡</span>
+          <span class="btn-label">BLOCK</span>
+        </button>
+        <button id="btn-attack" class="touch-btn sketch-btn attack-btn" aria-label="Attack">
+          <span class="btn-icon">⚔</span>
+          <span class="btn-label">ATTACK</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="main.js?v=5"></script>
+</body>
+</html>
